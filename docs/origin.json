@@ -1,0 +1,11 @@
+{
+  "sourceFile": "bloom_wax_hatchery_0.11.0.html",
+  "libraryFileId": "libfile_f3877e1f9bcc8191b0cebfb2ea4020a6",
+  "validationLibraryFileId": "libfile_4144fd8e89b48191868f5ddc1dc00225",
+  "version": "0.11.0",
+  "buildId": "20261012-air-release-pressure-control-r1",
+  "sizeBytes": 713370,
+  "sha256": "90d6bb2866f683ef9d7e636f3839058f7689cd26d447dafe6f69c703c0a917fe",
+  "import": "Original 0.11.0 is baseline; 0.11.1 replaces pointer/clock plumbing with GameKit and fixes narrow-screen modal overflow. Audio and gameplay definitions retained.",
+  "referenceRulesCommit": "1ab53f97402638ae58ae8c77fba8d18530dea7d6"
+}
