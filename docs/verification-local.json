@@ -1,0 +1,147 @@
+{
+  "started": "2026-10-14T02:42:28.841Z",
+  "checks": [
+    {
+      "name": "mouse boot",
+      "status": "PASS",
+      "evidence": {
+        "version": "0.11.1",
+        "frames": 1
+      }
+    },
+    {
+      "name": "mouse early release preserves ball",
+      "status": "PASS"
+    },
+    {
+      "name": "mouse cancel preserves ball and clears press",
+      "status": "PASS"
+    },
+    {
+      "name": "mouse perfect hatch and no duplicate reward",
+      "status": "PASS",
+      "evidence": {
+        "cycles": 3,
+        "deployed": 3,
+        "shells": 20
+      }
+    },
+    {
+      "name": "mouse collection and return",
+      "status": "PASS"
+    },
+    {
+      "name": "mouse good hatch and no duplicate reward",
+      "status": "PASS",
+      "evidence": {
+        "cycles": 3,
+        "deployed": 1,
+        "shells": 18
+      }
+    },
+    {
+      "name": "mouse overpressure fails once",
+      "status": "PASS"
+    },
+    {
+      "name": "mouse real audio buffers and playback",
+      "status": "PASS",
+      "evidence": {
+        "loaded": 20,
+        "clips": {
+          "pop_round": 34,
+          "air_hiss": 10,
+          "squish_slow": 9,
+          "air_puff": 18,
+          "squish_compact": 6,
+          "crack_dry": 1,
+          "air_tear": 1,
+          "shell_squish_pop": 1
+        },
+        "peak": 0.19351232051849365
+      }
+    },
+    {
+      "name": "mouse pause/resume without catch-up",
+      "status": "PASS"
+    },
+    {
+      "name": "mouse persisted collection after reload",
+      "status": "PASS"
+    },
+    {
+      "name": "defense wave runs with real simulation",
+      "status": "PASS"
+    },
+    {
+      "name": "touch boot",
+      "status": "PASS",
+      "evidence": {
+        "version": "0.11.1",
+        "frames": 3
+      }
+    },
+    {
+      "name": "touch early release preserves ball",
+      "status": "PASS"
+    },
+    {
+      "name": "touch cancel preserves ball and clears press",
+      "status": "PASS"
+    },
+    {
+      "name": "touch perfect hatch and no duplicate reward",
+      "status": "PASS",
+      "evidence": {
+        "cycles": 3,
+        "deployed": 3,
+        "shells": 20
+      }
+    },
+    {
+      "name": "touch collection and return",
+      "status": "PASS"
+    },
+    {
+      "name": "touch real audio buffers and playback",
+      "status": "PASS",
+      "evidence": {
+        "loaded": 20,
+        "clips": {
+          "pop_round": 24,
+          "air_hiss": 6,
+          "squish_slow": 5,
+          "air_puff": 10,
+          "squish_compact": 3
+        },
+        "peak": 0.19351232051849365
+      }
+    },
+    {
+      "name": "touch pause/resume without catch-up",
+      "status": "PASS"
+    },
+    {
+      "name": "touch persisted collection after reload",
+      "status": "PASS"
+    },
+    {
+      "name": "no page errors",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "limitations": [
+    "Physical mobile devices and human audio listening not tested",
+    "Full five-wave balance and every material/trait combination not tested",
+    "No multiplayer mode exists"
+  ],
+  "url": "http://127.0.0.1:53321/",
+  "browser": "155.0.4283.45",
+  "htmlSha256": "cd5eabff0174118a997128a08878239c338c2915520feb90291e0510166a54cb",
+  "version": "0.11.1",
+  "build": "20261014-gamekit-input-loop-r1",
+  "audioPeak": 0.19351232051849365,
+  "status": "PASS",
+  "elapsedSeconds": 33.07
+}

@@ -1,0 +1,18 @@
+{
+  "tag": "v0.3.0",
+  "distCommit": "63c62dae8d339f6f0329c0940206806f69509630",
+  "manifestSha256": "245b55e8f100a56ad11373a25b63b292a838414f6be8b1ee9388d63572b62c03",
+  "modules": [
+    {
+      "name": "input",
+      "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168",
+      "bytes": 17695
+    },
+    {
+      "name": "simloop",
+      "sha256": "6d8c3462ac01b0af967b3c259eede2b85e2f2f3f6813217391e6c322a7d10007",
+      "bytes": 50789
+    }
+  ],
+  "delivery": "Exact official modules embedded as data URL ESM in the single HTML"
+}
