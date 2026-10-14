@@ -1,0 +1,64 @@
+{
+  "started": "2026-10-14T03:38:01.147Z",
+  "checks": [],
+  "errors": [
+    "browserType.launch: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /usr/bin/chromium --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-A4ePXS --remote-debugging-pipe --no-startup-window\n<launched> pid=18\n[pid=18][err] /usr/bin/chromium: 9: [: 5225730048: unexpected operator\n[pid=18][err] [18:18:1014/123801.257341:FATAL:chrome/browser/process_singleton_posix.cc:297] Check failed: . socket() failed: Operation not permitted (1)\n[pid=18][err] [1014/123801.257561:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Operation not permitted (1)\nCall log:\n\u001b[2m  - <launching> /usr/bin/chromium --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-A4ePXS --remote-debugging-pipe --no-startup-window\u001b[22m\n\u001b[2m  - <launched> pid=18\u001b[22m\n\u001b[2m  - [pid=18][err] /usr/bin/chromium: 9: [: 5225730048: unexpected operator\u001b[22m\n\u001b[2m  - [pid=18][err] [18:18:1014/123801.257341:FATAL:chrome/browser/process_singleton_posix.cc:297] Check failed: . socket() failed: Operation not permitted (1)\u001b[22m\n\u001b[2m  - [pid=18][err] [1014/123801.257561:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Operation not permitted (1)\u001b[22m\n\u001b[2m  - [pid=18] <gracefully close start>\u001b[22m\n\u001b[2m  - [pid=18] <kill>\u001b[22m\n\u001b[2m  - [pid=18] <will force kill>\u001b[22m\n\u001b[2m  - [pid=18] <process did exit: exitCode=null, signal=SIGABRT>\u001b[22m\n\u001b[2m  - [pid=18] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=18] finished temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=18] <gracefully close end>\u001b[22m\n\n    at chromium.launch (/tmp/squish-chromium-runner.cjs:3:66)\n    at main (/workspace/scratch/fcfc32acd753/sdk031-newgames/squish-born/tests/play.e2e.cjs:10:161)"
+  ],
+  "limitations": [
+    "Physical mobile devices and human audio listening not tested",
+    "Full five-wave balance and every material/trait combination not tested",
+    "No multiplayer mode exists",
+    "All browser scenarios unexecuted: Chromium socket() failed with Operation not permitted, including escalated retry. No 0.11.3 live deployment verification."
+  ],
+  "url": "http://127.0.0.1:44429/",
+  "status": "ENVIRONMENT_BLOCKED",
+  "elapsedSeconds": 0.119,
+  "failureStage": "browser launch, before dependency loading or gameplay",
+  "version": "0.11.3",
+  "build": "20261014-squish-born-gamekit031-r1",
+  "baseCommit": "96f6df0f9d5f4ca3fd788238c906b57b81619556",
+  "htmlSha256": "7fdc44fa742e1547b386dcd6b9195187ed40ec4c531ad25f2d2c977218d6d754",
+  "gamekit": {
+    "tag": "v0.3.1",
+    "distCommit": "72b09b260edf9650353017acb49c06873fe9f5a1",
+    "manifestSha256": "c713809653043e8eb1d9b629c0c2734e9526217f69e04b49283d068c1b5d7da7",
+    "modules": [
+      {
+        "name": "input",
+        "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168",
+        "bytes": 17695
+      },
+      {
+        "name": "simloop",
+        "sha256": "1be543dc7e15ef7c87043af98a1fb49a0a45a779098bfa085dc7509709f1ea9c",
+        "bytes": 50899
+      }
+    ],
+    "delivery": "Exact official modules embedded as data URL ESM in the single HTML",
+    "sourceCommit": "baa96876876a08013ad28b5a71c83bfadd285fab"
+  },
+  "environment": {
+    "os": "Linux cloud workspace",
+    "requestedBrowser": "/usr/bin/chromium",
+    "runner": "Existing fixed tests/play.e2e.cjs with temporary external executablePath launcher; no scenario changes",
+    "mock": false
+  },
+  "staticChecks": [
+    {
+      "name": "Official input/simloop exact SHA-256 and ESM syntax",
+      "status": "PASS"
+    },
+    {
+      "name": "Official manifest exact SHA-256 and module hashes",
+      "status": "PASS"
+    },
+    {
+      "name": "Gameplay, audio, graphics, Config and storage unchanged outside SDK/pin/version/build replacements",
+      "status": "PASS"
+    },
+    {
+      "name": "git diff --check",
+      "status": "PASS"
+    }
+  ]
+}

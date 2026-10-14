@@ -27,3 +27,11 @@ GitHub Releases 엔드포인트에 발행된 release는 없었으며 최신 공�
 ## 0.11.2 — 정식 표시명
 
 문서 title, 상단 브랜드, 시작화면, 도움말, BUILD.name을 꾹꾹 디펜스 / Squish Born으로 정렬했다. 사용자에게 보이는 이름 변경이므로 PATCH를 올렸다. 기존 저장 키·내보내기 파일명·AUDIO_DATA·Config부터 게임/렌더 클래스 구간은 그대로다. 원본 출처의 0.11.0 이름과 과거 검증 기록은 역사적 사실로 보존한다.
+
+## 0.11.3 — GameKit v0.3.1
+
+공식 dist `72b09b260edf9650353017acb49c06873fe9f5a1` (source `baa96876876a08013ad28b5a71c83bfadd285fab`)의 input/simloop를 정확한 배포 바이트로 내장했다. input은 이전과 동일하며 simloop만 갱신되었다. manifest 원본과 SHA-256, 실행 진단 pin, 고정 사용자 시나리오의 기대 pin을 함께 동기화했다. BUILD_ID는 `20261014-squish-born-gamekit031-r1`이다. SDK의 호환 수정 적용이므로 PATCH만 올렸다.
+
+네트워크 모듈·별도 엔진·호환 경로를 추가하지 않았다. 기존 Simulation/입력/렌더 소유권과 게임·오디오·그래픽·Config·저장 계약을 유지했다. SDK 바이트·pin·버전·BUILD_ID 교체를 제외한 HTML 전체가 직전 기준본과 같음을 비교했다.
+
+[현재 검증 기록](verification-gamekit031-local.json)에 정적 PASS와 브라우저 환경 차단을 분리해 기록했다. 기존 고정 E2E를 실제 `/usr/bin/chromium`으로 실행하려 했으나 시작 단계에서 `socket() failed: Operation not permitted`로 중단되었다. 권한 확장 실행에서도 동일하여 게임 흐름은 실행되지 않았다. 실행별 180초 상한을 유지했고, 임시 런처는 저장소에 넣지 않았다. 과거 버전의 브라우저 결과를 이번 버전의 PASS로 재사용하지 않는다.
