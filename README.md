@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -27,6 +27,12 @@ npm run test:elements
 ```
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
+
+## 0.14.1 · 모바일에서 전투를 크게
+
+모바일 세로 화면의 부화 영역에 남던 250px 최소 높이를 해제하고 중복 제목·보상 설명을 압축했습니다. 볼과 터치 타깃 크기, 입력 좌표, 월드·사거리·전투 규칙은 유지합니다. 360×800 / 390×844 / 430×932에서 전투 높이는 184/194/214px에서 296/312/345px로, 화면 비중은 23%에서 37%로 늘었습니다. PC 배치는 유지합니다. 짧은 화면은 볼을 줄이지 않고 하단의 자연스러운 세로 스크롤을 사용합니다.
+
+[390px 수정 전 화면](docs/mobile-layout-before.png) · [수정 후 화면](docs/mobile-layout-after.png). 실제 Edge 전후 측정·터치·안전영역·성장 복귀와 공개 확인 결과는 해당 수정 PR에 기록합니다.
 
 ## 0.14.0 · 도전 밖의 영구 성장과 군집 연쇄
 
