@@ -15,7 +15,7 @@ async function main(){
   const response=await page.goto(url);const bytes=await response.body();result.htmlSha256=crypto.createHash('sha256').update(bytes).digest('hex');
   await page.waitForFunction(()=>!!window.BloomHatchery);
   const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());
-  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'63c62dae8d339f6f0329c0940206806f69509630');assert.equal(state.gamekit.running,true)}
+  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'72b09b260edf9650353017acb49c06873fe9f5a1');assert.equal(state.gamekit.running,true)}
   pass(mode+' boot',{version:state.build.version,frames:state.render.frames});
   await page.click('#practiceBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.state==='running');
   const cdp=touch?await context.newCDPSession(page):null;
