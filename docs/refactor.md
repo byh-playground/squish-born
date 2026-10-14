@@ -23,3 +23,7 @@ GitHub Releases 엔드포인트에 발행된 release는 없었으며 최신 공�
 [수정 후 기록](verification-local.json)은 같은 사용자 시나리오 20개 PASS이다. OS trusted 마우스와 CDP touchStart/touchEnd/touchCancel을 사용하고, 원본 read-only BloomHatchery 진단 API로 결과를 관측한다. 게임 상태 주입·시계 교체·엔진 mock·임의 재질 생성은 하지 않는다. 자연스러운 새 게임 UI를 통해 공기빼기볼이 나오는 판에서 검사하므로 랜덤 특성 조합이 매번 다를 수 있다.
 
 분석기 비영 출력은 실제 Web Audio 그래프 증거이며 사람이 스피커로 청취했다는 뜻은 아니다. 전체 물리 기기·장시간 균형·모든 재질/겹볼 조합은 미검증이다.
+
+## 0.11.2 — 정식 표시명
+
+문서 title, 상단 브랜드, 시작화면, 도움말, BUILD.name을 꾹꾹 디펜스 / Squish Born으로 정렬했다. 사용자에게 보이는 이름 변경이므로 PATCH를 올렸다. 기존 저장 키·내보내기 파일명·AUDIO_DATA·Config부터 게임/렌더 클래스 구간은 그대로다. 원본 출처의 0.11.0 이름과 과거 검증 기록은 역사적 사실로 보존한다.
