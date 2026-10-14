@@ -7,7 +7,7 @@ let server,browser;
 async function main(){
  let url=process.env.TEST_URL;
  if(!url){server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html; charset=utf-8');r.end(fs.readFileSync(process.env.TEST_HTML||path.join(root,'index.html')))});await new Promise(r=>server.listen(0,'127.0.0.1',r));url=`http://127.0.0.1:${server.address().port}/`}
- result.url=url;browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});result.browser=browser.version();
+ const screenshotDir=process.env.SCREENSHOT_DIR||path.join(root,'artifacts');fs.mkdirSync(screenshotDir,{recursive:true});result.url=url;browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});result.browser=browser.version();
  function pass(name,evidence){result.checks.push({name,status:'PASS',evidence});console.log('PASS',name)}
  for(const touch of [false,true]){
   const mode=touch?'touch':'mouse';const context=await browser.newContext({viewport:touch?{width:390,height:844}:{width:1365,height:900},isMobile:touch,hasTouch:touch,deviceScaleFactor:1});
@@ -15,7 +15,7 @@ async function main(){
   const response=await page.goto(url);const bytes=await response.body();result.htmlSha256=crypto.createHash('sha256').update(bytes).digest('hex');
   await page.waitForFunction(()=>!!window.BloomHatchery);
   const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());
-  let state=await inspect();result.version=state.build.version;result.build=state.build.id;
+  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'63c62dae8d339f6f0329c0940206806f69509630');assert.equal(state.gamekit.running,true)}
   pass(mode+' boot',{version:state.build.version,frames:state.render.frames});
   await page.click('#practiceBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.state==='running');
   const cdp=touch?await context.newCDPSession(page):null;
@@ -33,7 +33,7 @@ async function main(){
    const rewards=after.resources.shells;if(!touch)await up();await page.waitForTimeout(1100);const stable=(await inspect()).simulation;assert.equal(stable.stats.hatches,after.stats.hatches);assert.equal(stable.resources.shells,rewards);pass(mode+' '+grade+' hatch and no duplicate reward',{cycles,deployed:after.stats.deployed-before.stats.deployed,shells:rewards-before.resources.shells});
   }
   await hatch('perfect');
-  await page.screenshot({path:path.join(root,'docs',touch?'squish-born-mobile.png':'squish-born-desktop.png'),fullPage:true});
+  await page.screenshot({path:path.join(screenshotDir,touch?'squish-born-mobile.png':'squish-born-desktop.png'),fullPage:true});
   await page.click('#collectionBtn');await page.waitForTimeout(150);assert.ok((await page.locator('.collect-card:not(.locked)').count())>0);await page.click('[data-close]');pass(mode+' collection and return');
   if(!touch){await restart();await hatch('good');await restart();await down();await page.waitForFunction(()=>BloomHatchery.inspect().simulation.stats.failures===1);await up();state=await inspect();assert.equal(state.simulation.stats.hatches,0);pass('mouse overpressure fails once');}
   await page.click('#soundBtn');await page.click('[data-sound="air_hiss"]');await page.waitForTimeout(70);result.audioPeak=Math.max(result.audioPeak||0,await page.evaluate(()=>BloomHatchery.sampleAudio()));state=await inspect();assert.equal(state.audio.loaded,20);assert.equal(state.audio.state,'running');assert.ok(state.audio.metrics.clips.air_hiss>0);assert.ok(state.audio.metrics.clips.air_puff>0);pass(mode+' real audio buffers and playback',{loaded:state.audio.loaded,clips:state.audio.metrics.clips,peak:result.audioPeak});
