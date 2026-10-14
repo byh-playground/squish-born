@@ -142,7 +142,7 @@ const AUDIO_DATA = {"crack_dry":"UklGRsRBAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABA
  * Material-integrated reliefs use exact hit-test points; misplacement forgiveness does not alter timing judgement.
  * Official GameKit input/simloop embedded; no runtime CDN, image or audio fetch.
  */
-const BUILD = {version:'0.12.1', id:'20261014-squish-born-chain-rhythm-r1', name:'꾹꾹 디펜스 / Squish Born'};
+const BUILD = {version:'0.12.1', id:'20261014-squish-born-chain-rhythm-r2', name:'꾹꾹 디펜스 / Squish Born'};
 const Config = {
  clock:{step:1/60,maxFrame:.12,maxSteps:8},
  world:{width:540,height:470,lanes:[133,270,407],nest:{x:270,y:404}},
@@ -1107,6 +1107,7 @@ class Renderer{
  reset(){this.effects=[];this.time=0}
  event(e,sim){const rx=Config.hatch.centers[0],ry=Config.hatch.centerY;
   // Small peripheral stitch cues; no face-centred wraps or particle cloud.
+  if(e.kind==='knotCompress')this.add({space:'field',type:'knotTug',x:e.x,y:e.y,radius:e.radius,life:.30,age:0});
   if(e.kind==='knotTied')this.add({space:'field',type:'knotTie',x:e.x,y:e.y,radius:e.radius,life:.24,age:0});
   if(e.kind==='knotUnwind'){
    this.add({space:'field',type:'knotPop',x:e.x,y:e.y,radius:e.radius,step:e.step,life:.28,age:0});
@@ -1155,11 +1156,13 @@ class Renderer{
   if(e.type==='text'){ctx.globalAlpha=clamp((1-u)*3,0,1);drawLabel(ctx,e.text,0,0,{size:e.size,color:e.color})}
   else if(e.type==='piece'){if(u>.55)ctx.scale(1-(u-.55)*1.8,1-(u-.55)*1.8);ctx.rotate(e.rot);ctx.scale(1,Math.max(.3,Math.cos(u*3)));const path=pathFromPoints(e.poly);ctx.save();ctx.translate(0,3);ctx.fillStyle=tint(e.color,-.14);ctx.fill(path);ctx.restore();ctx.fillStyle=e.color;ctx.fill(path);ctx.lineWidth=1;ctx.strokeStyle=tint(e.color,.25);ctx.stroke(path)}
   else if(e.type==='thread'){ctx.rotate(e.rot+u);const pts=[];for(let i=0;i<14;i++){const t=i/13,a=t*5.5,r=e.size*(1-t*.70);pts.push({x:Math.cos(a)*r,y:Math.sin(a)*r})}this.sprites.yarn.cord(ctx,pts,1.3,e.color,false)}
+  else if(e.type==='knotTug'){const pull=Math.sin(Math.min(1,u*1.7)*Math.PI)*6;this.drawKnotTether(ctx,e.radius,pull);ctx.strokeStyle=Config.knot.color;ctx.lineWidth=2.4;ctx.lineCap='round';for(const side of [-1,1]){ctx.beginPath();ctx.moveTo(e.radius*.8-4,8+side*(4+u*3));ctx.lineTo(e.radius*.8+3+pull,8+side*2);ctx.stroke()}}
   else if(e.type==='knotTie'||e.type==='knotPop'){ctx.translate(e.radius*1.6+5,14);const pop=e.type==='knotPop',r=pop?8+u*15:13-u*7;ctx.strokeStyle=Config.knot.color;ctx.lineWidth=pop?3*(1-u)+1:1.8;for(const side of [-1,1]){ctx.beginPath();ctx.ellipse(0,0,r,r*.55,0,side<0?Math.PI*.7:Math.PI*1.7,side<0?Math.PI*1.3:Math.PI*2.3);ctx.stroke()}if(pop){ctx.globalAlpha=clamp((1-u)*2,0,1);drawLabel(ctx,`${e.step}코`,12,19,{size:13,color:'#75472f'})}}
   else if(e.type==='knotSlack'){ctx.translate(e.radius*1.6+5,14);const pts=[];for(let i=0;i<14;i++){const t=i/13;pts.push({x:(t-.5)*25,y:Math.sin(t*Math.PI)*(4+8*u)})}this.sprites.yarn.cord(ctx,pts,2,e.color,false)}
   else if(e.type==='ring'){ctx.strokeStyle=e.color;ctx.lineWidth=1.8*(1-u);ctx.beginPath();ctx.ellipse(0,0,e.radius*(.3+.8*u),e.radius*(.25+.65*u),0,0,Math.PI*2);ctx.stroke()}
   else if(e.type==='softRecoil'){ctx.globalAlpha*=.35;ctx.strokeStyle='#a08370';ctx.lineWidth=2*(1-u)+.45;ctx.beginPath();ctx.ellipse(0,0,4+u*12,2+u*7,0,0,Math.PI*2);ctx.stroke()}
   ctx.restore()}}
+ drawKnotTether(ctx,radius,pull=0){this.sprites.yarn.cord(ctx,[{x:radius*1.1,y:3},{x:radius*1.35+pull,y:11},{x:radius*1.6+5,y:14}],2.2,Config.knot.color,false)}
  drawKnot(ctx,x,y,scale=1){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);const pts=[];for(let i=0;i<=32;i++){const a=i/32*Math.PI*2;pts.push({x:Math.sin(a)*7,y:Math.sin(a*2)*3.3})}this.sprites.yarn.cord(ctx,pts,2.8,Config.knot.color,false);this.sprites.yarn.cord(ctx,[{x:-2,y:1},{x:-5,y:7}],2,Config.knot.color,false);this.sprites.yarn.cord(ctx,[{x:2,y:1},{x:6,y:6}],2,Config.knot.color,false);ctx.restore()}
  knotAnchor(position,radius,project,scale){const p=project(position.x,position.y);return {x:p.x+(radius*1.6+5)*scale,y:p.y+14*scale}}
  drawKnotChains(ctx,sim,project,sizeScale){for(const chain of sim.knotChains){
@@ -1177,7 +1180,7 @@ class Renderer{
   this.effectsIn(ctx,'field',project,sizeScale,true);
   this.drawKnotChains(ctx,sim,project,sizeScale);
   const actors=[...sim.allies,...sim.enemies].sort((a,b)=>a.position.y-b.position.y);for(const u of actors){const x=lerp(u.previous.x,u.position.x,alpha),y=lerp(u.previous.y,u.position.y,alpha),p=project(x,y);ctx.save();ctx.translate(p.x,p.y);ctx.scale(sizeScale,sizeScale);const enemy=u.team==='enemy',s=(enemy?u.definition.scale:1)*68;ctx.fillStyle=enemy?'#86748728':'#7d946328';ctx.beginPath();ctx.ellipse(0,10,s*.24,s*.075,0,0,Math.PI*2);ctx.fill();const moving=u.state==='moving',hop=motion&&moving?Math.abs(Math.sin(sim.time*9+u.id))*3:0,hit=u.status.hit>0,attack=u.status.attack>0,rotation=motion?(moving?Math.sin(sim.time*8+u.id)*.055:Math.sin(sim.time*2+u.id)*.014)+(hit?Math.sin(sim.time*75)*.07:0):0;ctx.rotate(rotation);let type=0;if(enemy)type=Config.enemies.findIndex(d=>d.id===u.definition.id);else type=Config.units.findIndex(d=>d.id===u.definition.id);const sprite=enemy?this.sprites.enemy(type):this.sprites.unit(type,u.gold);ctx.save();const compression=enemy?sim.knotChains.find(c=>c.target===u.id&&c.phase==='compress'):null,recoil=enemy?this.effects.find(e=>e.type==='knotRecoil'&&e.target===u.id):null;if(motion&&compression){const t=1-compression.left/Config.knot.compress;ctx.translate(0,4*t);ctx.scale(1+.18*t,1-.22*t)}else if(motion&&recoil){const t=recoil.age/recoil.life,pulse=Math.sin(t*Math.PI);ctx.translate(0,-7*pulse);ctx.scale(1-.09*pulse,1+.12*pulse)}if(u.attack.windup){const t=1-u.attack.windup.left/Config.knot.windup;ctx.translate(0,-5*t);ctx.scale(1-.12*t,1+.10*t)}else if(motion&&attack)ctx.scale(1.04,.95);ctx.drawImage(sprite,-s/2,-s*.68-hop,s,s);ctx.restore();
-  if(enemy&&u.knot){const growth=clamp((sim.time-u.knot.tiedAt)/.28,0,1);this.drawKnot(ctx,u.radius*1.6+5,14,(.72+.18*growth)*(u.knot.reserved?1.15:1))}
+  if(enemy&&u.knot){this.drawKnotTether(ctx,u.radius);const growth=clamp((sim.time-u.knot.tiedAt)/.28,0,1);this.drawKnot(ctx,u.radius*1.6+5,14,(.72+.18*growth)*(u.knot.reserved?1.15:1))}
   if(!enemy&&u.definition.detonateKnots){
    for(let i=0;i<Config.knot.normalHits;i++){ctx.strokeStyle=i<u.attack.normalHits?'#995f42':'#bdc4ad';ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(-8+i*8,15);ctx.lineTo(-5+i*8,11);ctx.stroke()}
    if(u.attack.windup){const t=1-u.attack.windup.left/Config.knot.windup;ctx.save();ctx.translate(10,-30-12*t);ctx.rotate(-.7-t*.5);this.sprites.yarn.cord(ctx,[{x:-16,y:0},{x:14,y:0}],4,'#b69061',false);ctx.restore();drawLabel(ctx,'꾹!',0,-s*.65,{size:12,color:'#88583e'})}
