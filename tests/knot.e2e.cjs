@@ -30,7 +30,11 @@ const timer=setTimeout(()=>{console.error('120 second limit exceeded');process.e
  for(const mobile of [false,true]){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1365,height:900},isMobile:mobile,hasTouch:mobile});const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>window.__knotQa);const prefix=mobile?'mobile':'desktop';
- let state=await page.evaluate(()=>__knotQa.setup());assert.equal(state.snapshot.knots.length,5);assert.equal(state.snapshot.knotChains.length,0);await page.screenshot({path:path.join(out,prefix+'-prepared.png')});
+ let state=await page.evaluate(()=>__knotQa.setup());
+ // The stopped fixture loop cannot repaint after an initial ResizeObserver clears the canvas.
+ // Let layout/fonts settle, then repaint without advancing simulation time or combat.
+ const prepared=await page.evaluate(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));__knotQa.draw();const c=document.getElementById('field');return {state:__knotQa.read(),alpha:c.getContext('2d').getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data[3]}});
+ assert.equal(prepared.state.snapshot.time,state.snapshot.time);state=prepared.state;assert.equal(state.snapshot.knots.length,5);assert.equal(state.snapshot.knotChains.length,0);assert.ok(prepared.alpha>0,'Prepared battlefield must be painted');await page.screenshot({path:path.join(out,prefix+'-prepared.png')});
  state=await page.evaluate(()=>__knotQa.normals());assert.equal(state.snapshot.knots.length,5);assert.equal(state.snapshot.knotChains.length,0);
  state=await page.evaluate(()=>__knotQa.step());assert.ok(state.snapshot.allies[1].windup);await page.screenshot({path:path.join(out,prefix+'-windup.png')});
  for(let i=0;i<30&&!state.log.some(e=>e.kind==='knotCompress');i++)state=await page.evaluate(()=>__knotQa.step());assert.ok(state.log.some(e=>e.kind==='knotCompress'));await page.screenshot({path:path.join(out,prefix+'-compress.png')});
