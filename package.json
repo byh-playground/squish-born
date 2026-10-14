@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "node scripts/serve.cjs",
     "test": "node tests/play.e2e.cjs",
-    "check": "node --experimental-vm-modules scripts/check.cjs"
+    "check": "node --experimental-vm-modules scripts/check.cjs && node tests/knot.sim.cjs",
+    "test:knots": "node tests/knot.e2e.cjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"
