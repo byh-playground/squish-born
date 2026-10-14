@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "url": "http://127.0.0.1:59560",
+  "build": {
+    "version": "0.11.2",
+    "id": "20261014-squish-born-name-r1",
+    "name": "꾹꾹 디펜스 / Squish Born"
+  },
+  "htmlSha256": "ba8493a5d5d2c478b14ac462e8e144c99824e63e48891048877efb99d7794f7f",
+  "checks": [
+    "document title",
+    "header",
+    "start screen",
+    "English subtitle",
+    "help",
+    "diagnostic product/version",
+    "original audio and rules/storage section hashes unchanged"
+  ]
+}
