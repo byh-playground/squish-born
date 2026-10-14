@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.13.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -22,25 +22,31 @@ npm run dev
 npm ci
 npm run check
 npm test
+npm run test:growth
+npm run test:elements
 ```
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
 
-## 0.13.0 · 속성 기본 공격이 튕기는 전투
+## 0.14.0 · 도전 밖의 영구 성장과 군집 연쇄
 
-불꽃싹(불씨), 서리송이(냉기), 번개침(번개), 물꽃술사(물)의 기본 공격탄이 적 사이를 실제로 이동합니다. 바위갓은 땅의 근접 전열로 유지합니다. 캐릭터의 팔레트와 털실 실루엣도 속성에 맞춰 새로 그렸습니다.
+완성 보상과 웨이브 보상으로 얻은 **조개**를 모아 다음 도전을 준비합니다. 패배·도전 종료·새로고침에도 잔액과 성장이 남습니다. 처음 화면과 결과 화면의 **정원의 성장**에서 부화/연쇄/속성/방어 탭 → 미니 트리 → 선택 상세 → 명시적 구매로 진행합니다. 전투 중에는 조회만 가능하고 연습은 재화·도감·기록을 저장하지 않습니다.
 
-- 최초 명중 뒤 최대 3회 튕김, 가까운 다른 적 선택, 같은 탄의 재방문 금지. 부화장 중립 바늘도 같은 경로를 사용합니다.
-- 화상·감속·젖음은 적의 공유 상태입니다. 불씨+물=증기, 물+냉기=빙결, 물+번개=전도이며 바뀐 탄의 효과가 다음 적으로 전달됩니다. 탄마다 반응은 한 번, 추가 탄/재귀 광역 분기는 없습니다.
-- 물꽃술사의 치유는 별도 아군 탄이 도착할 때 적용됩니다. 표식 준비·버섯 4타 기폭과 주변 즉시 관통 피해는 제거했습니다.
-- 9종 재질 조작, Good/Perfect 보상, 첫 두 역할과 셔플백, 도감 키·설정·기록 저장은 유지합니다.
-- 초기 조정값과 상태 소유권, 반응 표는 [속성 전투 정의](docs/element-combat.md)에 있습니다. 모든 값은 Config에서 조정합니다.
+- 부화장은 공격하지 않습니다. 시작 불꽃싹이 첫 방어를 맡으며, 영구 성장으로 바위갓의 시작 합류도 열 수 있습니다.
+- 모든 원거리 동료의 사거리는 560입니다. 대형 이동 제한과 공격 범위를 분리해 적이 나타날 때부터 공격합니다. 바위갓의 근접 역할은 유지합니다.
+- 기본 3회 튕김과 화상·감속·젖음/증기·빙결·전도는 처음부터 열려 있습니다. 성장으로 4회·5회 튕김, 피해 유지율과 연결 반경을 높입니다.
+- 일반 적 36/60/90/132/180 + 보스 1명, 총 499명을 군집으로 상대합니다. HP 배율은 0.8/0.9/1/1.15/1.35로 조정했습니다. 실제 탄의 짧은 궤적·방향 고리·압축 타격을 보강하며 장식 실 파티클만 제한합니다.
+- 9종 재질 조작·Good/Perfect 보상·직접 부화의 첫 두 역할과 셔플백·기존 도감 키는 유지합니다. 타워 전용 강화와 판 안의 구매는 제거했습니다.
 
-`npm run test:elements` 또는 `npm run test:chain-natural`은 실제 자연 웨이브를 PC·390px에서 순차 실행합니다. 성공 Good 부화만 5초마다 제공하며 HP·피해·위치·스폰·이동·둥지 사격은 제품 그대로입니다. `artifacts/element-combat/`에 세 반응, 움직이는 튕김 탄, 캐릭터 그림과 실제 속도 영상을 남기며 저장 불변을 확인합니다. 자동 PASS와 별도로 실제 프레임을 검토합니다.
+노드 12개의 가격·효과·조건, 보상 저장과 시작 흐름, 물량 튜닝은 [성장·군집 전투 정의](docs/growth-combat.md), 속성의 실제 비행·반응은 [속성 전투 정의](docs/element-combat.md)에 있습니다. 수치는 Config에서 관리합니다.
 
-`node tests/element-natural.e2e.cjs --serve`은 http://127.0.0.1:8772 에서 같은 자연 전투의 40~54초 구간을 실제 시간으로 재생합니다. 정상 사용자 입력·도감·일시정지·새로고침 저장은 `npm test`가 담당합니다. `npm run check`는 공식 SDK 해시와 ESM 구문을 확인합니다. 내부 경계 검사는 개발 중 임시로 실행하며 영구 테스트에 누적하지 않습니다.
+`npm test`는 실제 마우스·390px 터치의 입력/완성/취소/과압/오디오/일시정지와 연습 저장 차단을 확인합니다. `npm run test:growth`는 기존 프로필에서 선택·구매·더블클릭·자연 패배·재시작·실제 방어 부화·즉시 새로고침을 확인합니다.
 
-이 후보의 자연 전투는 부화가 스크립트로 제공되는 격리 검증입니다. 실기기 모바일, 사람의 청취, 전체 5웨이브 밸런스는 미검증입니다. 아래의 과거 버전 기록을 이번 후보의 검증 결과로 사용하지 않습니다.
+`npm run test:elements` 또는 `npm run test:chain-natural`은 실제 웨이브·HP·피해·이동을 사용합니다. 성공 Good 부화만 5초마다 제공하며 PC는 기본 3회, 390px은 성장 5회 튕김으로 499명과 보스를 끝까지 확인합니다. 130~144초 구간은 실제 시간으로 재생하며 다른 구간은 60Hz로 빠르게 진행합니다. 생성물은 `artifacts/element-combat/`에 남으며 자동 assertion 외에 실제 캡처·영상 프레임을 검토합니다.
+
+`node tests/element-natural.e2e.cjs --serve`는 http://127.0.0.1:8772 에서 같은 130~144초 전투를 재생합니다. `npm run check`는 고정된 공식 SDK 해시와 ESM 구문을 확인합니다. 내부 경계와 부하 벤치마크는 개발 중 임시로 실행하며 영구 단위 테스트로 누적하지 않습니다.
+
+이번 검증의 5웨이브 완주는 부화 성공을 일정하게 제공한 격리 시나리오입니다. 사람의 무보조 난이도, 실기기 모바일, 사람의 청취, 모든 재질/특성 조합과 장기 성장 경제는 미검증입니다. 정확한 head/merge SHA·성능 비교·공개 배포 확인은 이번 PR에 기록합니다.
 
 ## 검증·배포
 
@@ -60,4 +66,4 @@ GameKit **v0.3.1** / dist **72b09b260edf9650353017acb49c06873fe9f5a1**의 공식
 
 [음원 출처·CC0 확인](docs/audio-sources.md)을 읽어 주세요. 모든 기존 음원·그래픽 고지를 유지했습니다. 게임 전체에 MIT 등 새 라이선스를 임의 부여하지 않습니다. 공개됨이 별도 재사용 라이선스를 의미하지 않습니다.
 
-[개발 규칙](https://github.com/byh-playground/bloom-reference/blob/1ab53f97402638ae58ae8c77fba8d18530dea7d6/rules/development.html) · [관리·검증 규칙](https://github.com/byh-playground/bloom-reference/blob/1ab53f97402638ae58ae8c77fba8d18530dea7d6/rules/project-management.html) · [UI/UX 규칙](https://github.com/byh-playground/bloom-reference/blob/1ab53f97402638ae58ae8c77fba8d18530dea7d6/rules/visual-ux.html)
+[개발 규칙](https://github.com/byh-playground/bloom-reference/blob/006093adbbe27d2566a60ceacac1d544fd9e1978/rules/development.html) · [관리·검증 규칙](https://github.com/byh-playground/bloom-reference/blob/006093adbbe27d2566a60ceacac1d544fd9e1978/rules/project-management.html) · [UI/UX 규칙](https://github.com/byh-playground/bloom-reference/blob/006093adbbe27d2566a60ceacac1d544fd9e1978/rules/visual-ux.html)
