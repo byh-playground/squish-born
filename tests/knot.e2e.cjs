@@ -26,7 +26,7 @@ let server,browser;const errors=[],results=[];
 const timer=setTimeout(()=>{console.error('120 second limit exceeded');process.exit(1)},120000);
 (async()=>{
  server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html; charset=utf-8');r.end(html)});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});
+ browser=await chromium.launch({...(process.env.BROWSER_EXECUTABLE_PATH?{executablePath:process.env.BROWSER_EXECUTABLE_PATH}:{channel:process.env.BROWSER_CHANNEL||'msedge'}),headless:true});
  for(const mobile of [false,true]){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1365,height:900},isMobile:mobile,hasTouch:mobile});const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>window.__knotQa);const prefix=mobile?'mobile':'desktop';
@@ -39,8 +39,8 @@ const timer=setTimeout(()=>{console.error('120 second limit exceeded');process.e
  state=await page.evaluate(()=>__knotQa.step());assert.ok(state.snapshot.allies[1].windup);await page.screenshot({path:path.join(out,prefix+'-windup.png')});
  for(let i=0;i<30&&!state.log.some(e=>e.kind==='knotCompress');i++)state=await page.evaluate(()=>__knotQa.step());assert.ok(state.log.some(e=>e.kind==='knotCompress'));await page.screenshot({path:path.join(out,prefix+'-compress.png')});
  for(let i=0;i<10&&!state.log.some(e=>e.kind==='knotFlight');i++)state=await page.evaluate(()=>__knotQa.step());state=await page.evaluate(()=>__knotQa.step(3));await page.screenshot({path:path.join(out,prefix+'-thread-flight.png')});
- state=await page.evaluate(()=>__knotQa.step(60));const unwind=state.log.filter(e=>e.kind==='knotUnwind');assert.equal(unwind.length,5);assert.equal(new Set(state.log.filter(e=>e.kind==='knotCompress').map(e=>e.target)).size,5);assert.equal(state.snapshot.knotChains.length,0);assert.equal(state.snapshot.knots.length,0);
- for(let i=1;i<unwind.length;i++)assert.ok(Math.abs(unwind[i].time-unwind[i-1].time-11/60)<.001); // Four compression + seven flight fixed ticks.
+ state=await page.evaluate(()=>__knotQa.step(120));const unwind=state.log.filter(e=>e.kind==='knotUnwind');assert.equal(unwind.length,5);assert.equal(new Set(state.log.filter(e=>e.kind==='knotCompress').map(e=>e.target)).size,5);assert.equal(state.snapshot.knotChains.length,0);assert.equal(state.snapshot.knots.length,0);
+ for(let i=1;i<unwind.length;i++)assert.ok(Math.abs(unwind[i].time-unwind[i-1].time-19/60)<.001); // Seven compression + twelve flight fixed ticks.
  assert.equal(state.errors.length,0);results.push({viewport:prefix,steps:unwind.length,beats:unwind.map(e=>e.time),initialEnemyHp:30*1.62,prepDamage:12,heavyDamage:7*1.6,burstDamage:12});await context.close();
  }
  assert.equal(errors.length,0);const result={status:'PASS',browser:browser.version(),htmlSha256:crypto.createHash('sha256').update(source).digest('hex'),results,errors,limitations:['Controlled wave-3 density with stationary enemies and nest fire suppressed; not full five-wave balance','Separate tests/play.e2e.cjs checks real user input and normal gameplay','Physical phone and human audio listening not checked']};fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

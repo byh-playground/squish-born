@@ -164,6 +164,20 @@ test('seeded runs produce identical combat, chain events, role draws, and RNG st
   const first = run(12345); assert.equal(run(12345), first); assert.notEqual(run(54321), first);
 });
 
+test('natural moving waves with normal nest fire produce readable sequential chains', () => {
+  const sim = new Simulation(734123), events = []; sim.start('defense');
+  sim.events.on(e => { if (e.kind.startsWith('knot')) events.push({...e, time: sim.time}); });
+  for (let tick = 0; tick < 34 * 60; tick++) {
+    if (tick % 720 === 0) sim.handleEgg({kind:'hatch', egg:0, unitCount:1, grade:'good', perfect:false, material:'crack', reward:10});
+    sim.update(Config.clock.step);
+  }
+  const end = events.find(e => e.kind === 'knotSlack' && e.steps >= 3);
+  assert.ok(end, 'A multi-node chain must occur in live-wave combat');
+  const beats = events.filter(e => e.kind === 'knotUnwind' && e.chain === end.chain);
+  for (let i = 1; i < beats.length; i++) assert.ok(Math.abs(beats[i].time - beats[i-1].time - 19/60) < 1e-8);
+  assert.ok(sim.stats.kills > 0); assert.ok(sim.wave.spawned > 0);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log('PASS', name); }

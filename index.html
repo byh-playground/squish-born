@@ -142,7 +142,7 @@ const AUDIO_DATA = {"crack_dry":"UklGRsRBAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABA
  * Material-integrated reliefs use exact hit-test points; misplacement forgiveness does not alter timing judgement.
  * Official GameKit input/simloop embedded; no runtime CDN, image or audio fetch.
  */
-const BUILD = {version:'0.12.0', id:'20261014-squish-born-knot-chain-r1', name:'꾹꾹 디펜스 / Squish Born'};
+const BUILD = {version:'0.12.1', id:'20261014-squish-born-chain-rhythm-r2', name:'꾹꾹 디펜스 / Squish Born'};
 const Config = {
  clock:{step:1/60,maxFrame:.12,maxSteps:8},
  world:{width:540,height:470,lanes:[133,270,407],nest:{x:270,y:404}},
@@ -240,7 +240,7 @@ const Config = {
  failureEnemy:{healthScale:.72,damageScale:.72,speedScale:1.12,spawnY:92,earlyLimits:[1,2]},
  formation:{slots:7,bandGap:17,arcInset:.42},
  nest:{health:180,damage:5,interval:1.45,range:370,projectileSpeed:425},
- knot:{maxSteps:5,range:110,compress:4/60,flight:7/60,radius:38,damage:12,splashScale:.5,color:'#bf815d',windup:.42,normalHits:3,heavyScale:1.6},
+ knot:{maxSteps:5,range:110,compress:7/60,flight:12/60,radius:38,damage:12,splashScale:.5,color:'#ad684c',windup:.42,normalHits:3,heavyScale:1.6},
  capacity:{allies:24,enemies:96,particles:280,shots:160},
  wave:{preparation:8,break:4,clearReward:6,recoverHealth:5,count:5},
  audio:{volume:.72,combat:.11,interaction:.85,voices:10,combatVoices:3,combatGap:.16},
@@ -1005,18 +1005,18 @@ class Simulation{
       }
       if(shot.payload.splash)for(const other of this.enemies)if(other.id!==target.id&&other.health.current>0&&distance(other.position,target.position)<shot.payload.splash)other.applyDamage({...shot.payload,damage:shot.payload.damage*.55});this.events.emit({kind:'impact',x:shot.targetPoint.x,y:shot.targetPoint.y,damage:shot.payload.damage,team:'ally',type:shot.type})}remove.add(shot.id)}else{shot.position.x+=dx/d*step;shot.position.y+=dy/d*step}if(shot.age>3)remove.add(shot.id)}this.projectiles=this.projectiles.filter(s=>!remove.has(s.id))}
  // Knots and delayed hops belong to the fixed simulation, never to VFX callbacks.
- tieKnot(target,shot){if(target.knot)return;target.knot={tiedAt:this.time,reserved:null};this.events.emit({kind:'knotTied',target:target.id,x:target.position.x,y:target.position.y,from:{...shot.previous}})}
+ tieKnot(target,shot){if(target.knot)return;target.knot={tiedAt:this.time,reserved:null};this.events.emit({kind:'knotTied',target:target.id,radius:target.radius,x:target.position.x,y:target.position.y,from:{...shot.previous}})}
  startKnotChain(target,attacker){
   if(!target.knot||target.knot.reserved||this.knotChains.length>=Config.capacity.allies)return false;
   const chain={id:++this.chainId,owner:attacker.id,damage:Config.knot.damage*(attacker.gold?1.35:1),steps:0,used:[],phase:'compress',left:Config.knot.compress,target:target.id,point:{...target.position},from:{...target.position}};
   this.knotChains.push(chain);this.compressKnot(chain,target);return true;
  }
  compressKnot(chain,target){
-  target.knot=null;chain.used.push(target.id);chain.target=target.id;chain.point={...target.position};chain.phase='compress';chain.left=Config.knot.compress;
-  this.events.emit({kind:'knotCompress',chain:chain.id,target:target.id,x:chain.point.x,y:chain.point.y});
+  target.knot=null;chain.used.push(target.id);chain.target=target.id;chain.point={...target.position};chain.radius=target.radius;chain.phase='compress';chain.left=Config.knot.compress;
+  this.events.emit({kind:'knotCompress',chain:chain.id,target:target.id,radius:target.radius,x:chain.point.x,y:chain.point.y});
  }
  nextKnot(chain){return this.enemies.filter(e=>e.health.current>0&&e.knot&&!e.knot.reserved&&!chain.used.includes(e.id)&&distance(chain.point,e.position)<=Config.knot.range).sort((a,b)=>distance(chain.point,a.position)-distance(chain.point,b.position)||a.id-b.id)[0]}
- endKnotChain(chain){chain.done=true;const reserved=this.enemies.find(e=>e.id===chain.target&&e.knot?.reserved===chain.id);if(reserved)reserved.knot.reserved=null;this.events.emit({kind:'knotSlack',x:chain.point.x,y:chain.point.y,steps:chain.steps,chain:chain.id})}
+ endKnotChain(chain){chain.done=true;const reserved=this.enemies.find(e=>e.id===chain.target&&e.knot?.reserved===chain.id);if(reserved)reserved.knot.reserved=null;this.events.emit({kind:'knotSlack',radius:chain.radius,x:chain.point.x,y:chain.point.y,steps:chain.steps,chain:chain.id})}
  updateKnotChains(dt){for(const chain of this.knotChains){
   chain.left-=dt;if(chain.left>1e-8)continue;
   if(chain.phase==='flight'){
@@ -1028,10 +1028,10 @@ class Simulation{
   for(const enemy of this.enemies){if(enemy.health.current<=0)continue;const direct=enemy.id===chain.target;
    if(direct||distance(chain.point,enemy.position)<=Config.knot.radius)enemy.applyDamage({damage:chain.damage*(direct?1:Config.knot.splashScale)});
   }
-  this.events.emit({kind:'knotUnwind',x:chain.point.x,y:chain.point.y,chain:chain.id,step:chain.steps});
+  this.events.emit({kind:'knotUnwind',target:chain.target,radius:chain.radius,x:chain.point.x,y:chain.point.y,chain:chain.id,step:chain.steps});
   const next=chain.steps<Config.knot.maxSteps?this.nextKnot(chain):null;
   if(!next){this.endKnotChain(chain);continue}
-  next.knot.reserved=chain.id;chain.from={...chain.point};chain.target=next.id;chain.to={...next.position};chain.phase='flight';chain.left=Config.knot.flight;
+  next.knot.reserved=chain.id;chain.from={...chain.point};chain.fromRadius=chain.radius;chain.target=next.id;chain.to={...next.position};chain.phase='flight';chain.left=Config.knot.flight;
   this.events.emit({kind:'knotFlight',x:chain.point.x,y:chain.point.y,to:{...next.position},target:next.id,chain:chain.id});
  }this.knotChains=this.knotChains.filter(c=>!c.done)}
  finish(result){if(this.state!=='running')return;this.cancelPress();this.state=result;this.events.emit({kind:'end',result,wave:this.wave.index+1,stats:{...this.stats},mastery:structuredClone(this.mastery)})}
@@ -1106,12 +1106,14 @@ class Renderer{
  }
  reset(){this.effects=[];this.time=0}
  event(e,sim){const rx=Config.hatch.centers[0],ry=Config.hatch.centerY;
-  if(e.kind==='knotTied')this.add({space:'field',type:'knotWrap',x:e.x,y:e.y-14,color:Config.knot.color,life:.32,age:0});
+  // Small peripheral stitch cues; no face-centred wraps or particle cloud.
+  if(e.kind==='knotCompress')this.add({space:'field',type:'knotTug',x:e.x,y:e.y,radius:e.radius,life:.30,age:0});
+  if(e.kind==='knotTied')this.add({space:'field',type:'knotTie',x:e.x,y:e.y,radius:e.radius,life:.24,age:0});
   if(e.kind==='knotUnwind'){
-   for(let i=0;i<7;i++)this.add({space:'field',type:'thread',x:e.x,y:e.y-14,vx:this.rng.range(-65,65),vy:this.rng.range(-65,15),color:i%2?'#f3e2bd':Config.knot.color,size:3.5,life:.4,age:0,rot:this.rng.range(0,6)});
-   this.add({space:'field',type:'text',x:e.x+17,y:e.y-39,text:`${e.step}코`,size:11,color:'#88583e',life:.4,age:0,vy:-12});
+   this.add({space:'field',type:'knotPop',x:e.x,y:e.y,radius:e.radius,step:e.step,life:.28,age:0});
+   this.add({space:'field',type:'knotRecoil',target:e.target,x:e.x,y:e.y,life:.26,age:0});
   }
-  if(e.kind==='knotSlack')this.add({space:'field',type:'knotSlack',x:e.x,y:e.y-14,color:Config.knot.color,life:.55,age:0});
+  if(e.kind==='knotSlack')this.add({space:'field',type:'knotSlack',x:e.x,y:e.y,radius:e.radius,color:Config.knot.color,life:.34,age:0});
   if(e.kind==='targetMiss'){const p={x:rx+e.x*Config.hatch.radius,y:ry+e.y*Config.hatch.radius*Config.hatch.stretch};this.add({space:'hatch',type:'softRecoil',x:p.x,y:p.y,life:.36,age:0})}
   if(e.kind==='peel'){const centroid=e.poly.reduce((a,p)=>({x:a.x+p.x/e.poly.length,y:a.y+p.y/e.poly.length}),{x:0,y:0});this.add({space:'hatch',type:'piece',x:rx+centroid.x*65,y:ry+centroid.y*70,poly:e.poly.map(p=>({x:(p.x-centroid.x)*65,y:(p.y-centroid.y)*70})),color:Config.materials.find(m=>m.id===e.material)?.shell||'#d9e2bf',vx:this.rng.range(-110,110),vy:this.rng.range(-200,-70),rot:this.rng.range(-1,1),spin:this.rng.range(-6,6),life:.88,age:0})}
   if(e.kind==='crack')this.add({space:'hatch',type:'text',x:rx,y:ry-76,text:'빠작!',color:'#9d885b',size:20,life:.62,age:0,vy:-17});
@@ -1150,27 +1152,35 @@ class Renderer{
  }
  add(e){if(e.space==='hatch'&&e.type==='text')this.effects=this.effects.filter(f=>!(f.space==='hatch'&&f.type==='text'&&Math.abs(f.x-e.x)<78));if(e.space==='field'&&e.type==='text'){this.effects=this.effects.filter(f=>!(f.space===e.space&&f.type==='text'&&Math.abs(f.x-e.x)<45&&Math.abs(f.y-e.y)<30))}if(this.effects.length>=Config.capacity.particles)this.effects.shift();this.effects.push(e)}
  update(dt,active){if(!active)return;this.time+=dt;for(const e of this.effects){e.age+=dt;if(e.vx)e.x+=e.vx*dt;if(e.vy)e.y+=e.vy*dt;if(e.type==='piece'){e.vy+=530*dt;e.rot+=e.spin*dt}else if(e.type==='thread'){e.vy+=30*dt;e.vx*=Math.exp(-dt*2)}}this.effects=this.effects.filter(e=>e.age<e.life)}
- effectsIn(ctx,space,project,scale=1){for(const e of this.effects){if(e.space!==space)continue;const p=project(e.x,e.y),u=e.age/e.life;ctx.save();ctx.translate(p.x,p.y);ctx.scale(scale,scale);ctx.globalAlpha=(1-u)**.72;
+ effectsIn(ctx,space,project,scale=1,ground=false){for(const e of this.effects){if(e.space!==space||e.type.startsWith('knot')!==ground)continue;const p=project(e.x,e.y),u=e.age/e.life;ctx.save();ctx.translate(p.x,p.y);ctx.scale(scale,scale);ctx.globalAlpha=(1-u)**.72;
   if(e.type==='text'){ctx.globalAlpha=clamp((1-u)*3,0,1);drawLabel(ctx,e.text,0,0,{size:e.size,color:e.color})}
   else if(e.type==='piece'){if(u>.55)ctx.scale(1-(u-.55)*1.8,1-(u-.55)*1.8);ctx.rotate(e.rot);ctx.scale(1,Math.max(.3,Math.cos(u*3)));const path=pathFromPoints(e.poly);ctx.save();ctx.translate(0,3);ctx.fillStyle=tint(e.color,-.14);ctx.fill(path);ctx.restore();ctx.fillStyle=e.color;ctx.fill(path);ctx.lineWidth=1;ctx.strokeStyle=tint(e.color,.25);ctx.stroke(path)}
   else if(e.type==='thread'){ctx.rotate(e.rot+u);const pts=[];for(let i=0;i<14;i++){const t=i/13,a=t*5.5,r=e.size*(1-t*.70);pts.push({x:Math.cos(a)*r,y:Math.sin(a)*r})}this.sprites.yarn.cord(ctx,pts,1.3,e.color,false)}
-  else if(e.type==='knotWrap'){const pts=[];for(let i=0;i<30;i++){const a=i/29*Math.PI*4*(.3+.7*u);pts.push({x:Math.cos(a)*(19-9*u),y:Math.sin(a)*(11-5*u)})}this.sprites.yarn.cord(ctx,pts,2.2,e.color,false)}
-  else if(e.type==='knotSlack'){const pts=[];for(let i=0;i<20;i++){const t=i/19;pts.push({x:(t-.5)*48,y:Math.sin(t*Math.PI)*(5+13*u)+Math.sin(t*10)*3})}this.sprites.yarn.cord(ctx,pts,2.1,e.color,false)}
+  else if(e.type==='knotTug'){const pull=Math.sin(Math.min(1,u*1.7)*Math.PI)*6;this.drawKnotTether(ctx,e.radius,pull);ctx.strokeStyle=Config.knot.color;ctx.lineWidth=2.4;ctx.lineCap='round';for(const side of [-1,1]){ctx.beginPath();ctx.moveTo(e.radius*.8-4,8+side*(4+u*3));ctx.lineTo(e.radius*.8+3+pull,8+side*2);ctx.stroke()}}
+  else if(e.type==='knotTie'||e.type==='knotPop'){ctx.translate(e.radius*1.6+5,14);const pop=e.type==='knotPop',r=pop?8+u*15:13-u*7;ctx.strokeStyle=Config.knot.color;ctx.lineWidth=pop?3*(1-u)+1:1.8;for(const side of [-1,1]){ctx.beginPath();ctx.ellipse(0,0,r,r*.55,0,side<0?Math.PI*.7:Math.PI*1.7,side<0?Math.PI*1.3:Math.PI*2.3);ctx.stroke()}if(pop){ctx.globalAlpha=clamp((1-u)*2,0,1);drawLabel(ctx,`${e.step}코`,12,19,{size:13,color:'#75472f'})}}
+  else if(e.type==='knotSlack'){ctx.translate(e.radius*1.6+5,14);const pts=[];for(let i=0;i<14;i++){const t=i/13;pts.push({x:(t-.5)*25,y:Math.sin(t*Math.PI)*(4+8*u)})}this.sprites.yarn.cord(ctx,pts,2,e.color,false)}
   else if(e.type==='ring'){ctx.strokeStyle=e.color;ctx.lineWidth=1.8*(1-u);ctx.beginPath();ctx.ellipse(0,0,e.radius*(.3+.8*u),e.radius*(.25+.65*u),0,0,Math.PI*2);ctx.stroke()}
   else if(e.type==='softRecoil'){ctx.globalAlpha*=.35;ctx.strokeStyle='#a08370';ctx.lineWidth=2*(1-u)+.45;ctx.beginPath();ctx.ellipse(0,0,4+u*12,2+u*7,0,0,Math.PI*2);ctx.stroke()}
   ctx.restore()}}
- drawKnot(ctx,x,y,scale=1){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);const pts=[];for(let i=0;i<48;i++){const a=i/47*Math.PI*7,r=2+i/47*6;pts.push({x:Math.cos(a)*r,y:Math.sin(a)*r*.73})}this.sprites.yarn.cord(ctx,pts,2.8,Config.knot.color,false);this.sprites.yarn.cord(ctx,[{x:-6,y:3},{x:-10,y:6},{x:-13,y:4}],1.8,Config.knot.color,false);ctx.restore()}
+ drawKnotTether(ctx,radius,pull=0){this.sprites.yarn.cord(ctx,[{x:radius*1.1,y:3},{x:radius*1.35+pull,y:11},{x:radius*1.6+5,y:14}],2.2,Config.knot.color,false)}
+ drawKnot(ctx,x,y,scale=1){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);const pts=[];for(let i=0;i<=32;i++){const a=i/32*Math.PI*2;pts.push({x:Math.sin(a)*7,y:Math.sin(a*2)*3.3})}this.sprites.yarn.cord(ctx,pts,2.8,Config.knot.color,false);this.sprites.yarn.cord(ctx,[{x:-2,y:1},{x:-5,y:7}],2,Config.knot.color,false);this.sprites.yarn.cord(ctx,[{x:2,y:1},{x:6,y:6}],2,Config.knot.color,false);ctx.restore()}
+ knotAnchor(position,radius,project,scale){const p=project(position.x,position.y);return {x:p.x+(radius*1.6+5)*scale,y:p.y+14*scale}}
  drawKnotChains(ctx,sim,project,sizeScale){for(const chain of sim.knotChains){
-  if(chain.phase==='compress'){const p=project(chain.point.x,chain.point.y-14);ctx.save();ctx.translate(p.x,p.y);ctx.scale(sizeScale,sizeScale);const t=1-chain.left/Config.knot.compress;ctx.scale(1+.35*t,1-.5*t);this.drawKnot(ctx,0,0,1);ctx.restore();continue}
-  const target=sim.enemies.find(e=>e.id===chain.target),to=target?.position||chain.to,from=project(chain.from.x,chain.from.y-14),end=project(to.x,to.y-14),t=clamp(1-chain.left/Config.knot.flight,0,1),tip={x:lerp(from.x,end.x,t),y:lerp(from.y,end.y,t)-Math.sin(t*Math.PI)*9*sizeScale};
-  const pts=[];for(let i=0;i<16;i++){const u=i/15;pts.push({x:lerp(from.x,tip.x,u),y:lerp(from.y,tip.y,u)+Math.sin(u*Math.PI)*7*sizeScale*(1-t)})}this.sprites.yarn.cord(ctx,pts,2.4*sizeScale,Config.knot.color,false);
-  ctx.save();ctx.translate(tip.x,tip.y);ctx.rotate(Math.atan2(end.y-from.y,end.x-from.x));ctx.scale(sizeScale,sizeScale);this.sprites.yarn.cord(ctx,[{x:-7,y:0},{x:5,y:0}],2.3,'#e2cca1',false);ctx.restore();
+  const target=sim.enemies.find(e=>e.id===chain.target),end=this.knotAnchor(target?.position||chain.point,target?.radius||chain.radius,project,sizeScale);
+  if(chain.phase==='compress'){const t=clamp(1-chain.left/Config.knot.compress,0,1);ctx.save();ctx.translate(end.x,end.y);ctx.scale(sizeScale*(1+.5*t),sizeScale*(1-.55*t));this.drawKnot(ctx,0,0,1);ctx.restore();continue}
+  const from=this.knotAnchor(chain.from,chain.fromRadius,project,sizeScale),to=this.knotAnchor(target?.position||chain.to,target?.radius||chain.radius,project,sizeScale),t=clamp(1-chain.left/Config.knot.flight,0,1),travel=1-(1-t)**1.5,tip={x:lerp(from.x,to.x,travel),y:lerp(from.y,to.y,travel)},sag=(1-travel)*18*sizeScale;
+  const pts=[];for(let i=0;i<=24;i++){const u=i/24;pts.push({x:lerp(from.x,tip.x,u),y:lerp(from.y,tip.y,u)+Math.sin(u*Math.PI)*sag})}
+  // One continuous cord pays out, straightens and visibly tugs the next bow.
+  this.sprites.yarn.cord(ctx,pts,4.8*sizeScale,Config.knot.color,false);
+  ctx.save();ctx.translate(tip.x,tip.y);ctx.rotate(Math.atan2(to.y-from.y,to.x-from.x));ctx.scale(sizeScale,sizeScale);this.drawKnot(ctx,0,0,.85);ctx.restore();
  }}
  draw(sim,alpha=0){this.drawField(sim,alpha);this.drawHatch(sim)}
  drawField(sim,alpha){const c=this.field,ctx=c.getContext('2d'),m=this.mapping.field,{width:w,height:h,dpr}=m;if(w<2||h<2)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.drawImage(this.background,0,0,w,h);const sx=w/540,sy=h/470,project=(x,y)=>({x:x*sx,y:y*sy}),sizeScale=Math.min(sx,sy*1.23),motion=this.profile.data.settings.motion;
   const tier=sim.comboTier??(sim.mastery?.comboTier||0);if(tier>0){const p=project(Config.world.nest.x,Config.world.nest.y-34);ctx.save();ctx.translate(p.x,p.y);const pulse=1+Math.sin(sim.time*(4+tier))*0.05;ctx.scale(sizeScale*pulse,sizeScale*pulse);ctx.strokeStyle=tier>=3?'#d2a94f':tier>=2?'#c7b56f':'#b8b580';ctx.globalAlpha=.20+tier*.09;ctx.lineWidth=1.5+tier*.45;ctx.setLineDash([4,6-tier]);ctx.beginPath();ctx.ellipse(0,0,86+tier*18,28+tier*5,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);for(let i=0;i<tier+1;i++){ctx.globalAlpha=.10+tier*.035;ctx.beginPath();ctx.ellipse(0,0,64+i*19,20+i*4,0,0,Math.PI*2);ctx.stroke()}ctx.restore()}
-  const actors=[...sim.allies,...sim.enemies].sort((a,b)=>a.position.y-b.position.y);for(const u of actors){const x=lerp(u.previous.x,u.position.x,alpha),y=lerp(u.previous.y,u.position.y,alpha),p=project(x,y);ctx.save();ctx.translate(p.x,p.y);ctx.scale(sizeScale,sizeScale);const enemy=u.team==='enemy',s=(enemy?u.definition.scale:1)*68;ctx.fillStyle=enemy?'#86748728':'#7d946328';ctx.beginPath();ctx.ellipse(0,10,s*.24,s*.075,0,0,Math.PI*2);ctx.fill();const moving=u.state==='moving',hop=motion&&moving?Math.abs(Math.sin(sim.time*9+u.id))*3:0,hit=u.status.hit>0,attack=u.status.attack>0,rotation=motion?(moving?Math.sin(sim.time*8+u.id)*.055:Math.sin(sim.time*2+u.id)*.014)+(hit?Math.sin(sim.time*75)*.07:0):0;ctx.rotate(rotation);let type=0;if(enemy)type=Config.enemies.findIndex(d=>d.id===u.definition.id);else type=Config.units.findIndex(d=>d.id===u.definition.id);const sprite=enemy?this.sprites.enemy(type):this.sprites.unit(type,u.gold);ctx.save();if(u.attack.windup){const t=1-u.attack.windup.left/Config.knot.windup;ctx.translate(0,-5*t);ctx.scale(1-.12*t,1+.10*t)}else if(motion&&attack)ctx.scale(1.04,.95);ctx.drawImage(sprite,-s/2,-s*.68-hop,s,s);ctx.restore();
-  if(enemy&&u.knot){const growth=clamp((sim.time-u.knot.tiedAt)/.28,0,1);this.drawKnot(ctx,0,-14,.65+.35*growth)}
+  this.effectsIn(ctx,'field',project,sizeScale,true);
+  this.drawKnotChains(ctx,sim,project,sizeScale);
+  const actors=[...sim.allies,...sim.enemies].sort((a,b)=>a.position.y-b.position.y);for(const u of actors){const x=lerp(u.previous.x,u.position.x,alpha),y=lerp(u.previous.y,u.position.y,alpha),p=project(x,y);ctx.save();ctx.translate(p.x,p.y);ctx.scale(sizeScale,sizeScale);const enemy=u.team==='enemy',s=(enemy?u.definition.scale:1)*68;ctx.fillStyle=enemy?'#86748728':'#7d946328';ctx.beginPath();ctx.ellipse(0,10,s*.24,s*.075,0,0,Math.PI*2);ctx.fill();const moving=u.state==='moving',hop=motion&&moving?Math.abs(Math.sin(sim.time*9+u.id))*3:0,hit=u.status.hit>0,attack=u.status.attack>0,rotation=motion?(moving?Math.sin(sim.time*8+u.id)*.055:Math.sin(sim.time*2+u.id)*.014)+(hit?Math.sin(sim.time*75)*.07:0):0;ctx.rotate(rotation);let type=0;if(enemy)type=Config.enemies.findIndex(d=>d.id===u.definition.id);else type=Config.units.findIndex(d=>d.id===u.definition.id);const sprite=enemy?this.sprites.enemy(type):this.sprites.unit(type,u.gold);ctx.save();const compression=enemy?sim.knotChains.find(c=>c.target===u.id&&c.phase==='compress'):null,recoil=enemy?this.effects.find(e=>e.type==='knotRecoil'&&e.target===u.id):null;if(motion&&compression){const t=1-compression.left/Config.knot.compress;ctx.translate(0,4*t);ctx.scale(1+.18*t,1-.22*t)}else if(motion&&recoil){const t=recoil.age/recoil.life,pulse=Math.sin(t*Math.PI);ctx.translate(0,-7*pulse);ctx.scale(1-.09*pulse,1+.12*pulse)}if(u.attack.windup){const t=1-u.attack.windup.left/Config.knot.windup;ctx.translate(0,-5*t);ctx.scale(1-.12*t,1+.10*t)}else if(motion&&attack)ctx.scale(1.04,.95);ctx.drawImage(sprite,-s/2,-s*.68-hop,s,s);ctx.restore();
+  if(enemy&&u.knot){this.drawKnotTether(ctx,u.radius);const growth=clamp((sim.time-u.knot.tiedAt)/.28,0,1);this.drawKnot(ctx,u.radius*1.6+5,14,(.72+.18*growth)*(u.knot.reserved?1.15:1))}
   if(!enemy&&u.definition.detonateKnots){
    for(let i=0;i<Config.knot.normalHits;i++){ctx.strokeStyle=i<u.attack.normalHits?'#995f42':'#bdc4ad';ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(-8+i*8,15);ctx.lineTo(-5+i*8,11);ctx.stroke()}
    if(u.attack.windup){const t=1-u.attack.windup.left/Config.knot.windup;ctx.save();ctx.translate(10,-30-12*t);ctx.rotate(-.7-t*.5);this.sprites.yarn.cord(ctx,[{x:-16,y:0},{x:14,y:0}],4,'#b69061',false);ctx.restore();drawLabel(ctx,'꾹!',0,-s*.65,{size:12,color:'#88583e'})}
@@ -1179,7 +1189,6 @@ class Renderer{
   ctx.restore()}
   const p=project(sim.nest.position.x,sim.nest.position.y);ctx.save();ctx.translate(p.x,p.y);ctx.scale(sizeScale,sizeScale);ctx.fillStyle='#8792672c';ctx.beginPath();ctx.ellipse(0,15,58,17,0,0,Math.PI*2);ctx.fill();const shake=motion&&sim.nest.hit>0?Math.sin(sim.time*65)*3:0;ctx.drawImage(this.sprites.nest(),-86+shake,-103,172,172);if(sim.upgrades.power>0){drawLabel(ctx,'Ⅰ'.repeat(sim.upgrades.power),0,38,{size:11,color:'#9c854e'})}ctx.restore();
   for(const s of sim.projectiles){const x=lerp(s.previous.x,s.position.x,alpha),y=lerp(s.previous.y,s.position.y,alpha),p=project(x,y),angle=Math.atan2((s.targetPoint.y-y)*sy,(s.targetPoint.x-x)*sx);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(angle);ctx.scale(sizeScale,sizeScale);if(s.type==='yarn'){this.drawKnot(ctx,0,0,.55);this.sprites.yarn.cord(ctx,[{x:-5,y:0},{x:-12,y:3},{x:-20,y:1}],1.5,Config.knot.color,false)}else if(s.type==='needle'){ctx.strokeStyle='#b8a273';ctx.lineWidth=2.6;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-12,0);ctx.lineTo(7,0);ctx.stroke();ctx.strokeStyle='#ede1b6';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,-.7);ctx.lineTo(6,-.7);ctx.stroke();ctx.strokeStyle='#a4b48677';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,0);ctx.quadraticCurveTo(-21,5,-32,-2);ctx.stroke()}else{ctx.fillStyle=s.type==='spore'?'#b9aad4':'#98af72';ctx.beginPath();ctx.ellipse(0,0,5.5,s.type==='spore'?5.5:3.4,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=s.type==='spore'?'#e6e1f0':'#d0daa5';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-2,-2);ctx.lineTo(2,2);ctx.stroke()}ctx.restore()}
-  this.drawKnotChains(ctx,sim,project,sizeScale);
   this.effectsIn(ctx,'field',project,sizeScale);
   if(sim.enemies.length===0){const text=sim.mode==='practice'?'오늘은 평화로운 정원':sim.wave.stage==='preparation'?'동료를 꺼내어, 정원을 지켜요':sim.wave.stage==='break'?'정원이 잠깐 숨을 고르고 있어요':'';if(text){drawLabel(ctx,text,w/2,h*.23,{size:Math.max(10,12*sx),color:'#899579',weight:500})}}
  }
