@@ -17,8 +17,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+      - run: npm ci
       - run: npm run check
-      - run: mkdir -p _site && cp index.html _site/index.html
+      - run: mkdir -p _site && cp index.html _site/index.html && cp -R assets _site/assets
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
