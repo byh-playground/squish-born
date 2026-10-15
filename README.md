@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.2** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.3** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -28,6 +28,10 @@ npm run test:mobile-pages
 ```
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
+
+## 0.14.3 · 화면 전환 시 손길 정리
+
+볼을 누르는 중 작업대 탭을 바꾸거나 회전/너비 변경으로 입력 좌표계가 바뀌면 진행 중인 손길을 취소합니다. 완료한 작업·보상은 유지하며 숨은 화면에서 누름이 계속되지 않습니다. 기존 취소 경로를 사용하며 판정·물리·전투 규칙은 변경하지 않습니다.
 
 ## 0.14.2 · 스크롤 대신 화면·카드 전환
 
