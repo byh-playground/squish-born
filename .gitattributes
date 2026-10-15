@@ -1,1 +1,7 @@
 index.html -text
+*.svg text eol=lf
+*.json text eol=lf
+*.mjs text eol=lf
+assets/compiled/*.js text eol=lf
+assets/gamekit/*.js -text
+scripts/vector-compiler/*.js text eol=lf

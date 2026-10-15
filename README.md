@@ -29,6 +29,12 @@ npm run test:mobile-pages
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
 
+## 0.15.0 — SVG vector renderer
+
+Squish keeps its existing visual style and moves its field, hatch, characters, nest, and kneading skin to authored SVG sources in `assets/svg/`. SVG metadata owns parts, pivots, sockets, expressions, and clips; `npm run vectors:compile` produces deterministic retained geometry in `assets/compiled/` with the pinned GameKit v0.6.2 runtime. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game. No PNG, canvas texture, or rasterized SVG artwork is used. Static source SVGs remain as SVG files for the collection UI.
+
+The deploy now requires the `assets/` directory alongside `index.html`. Run `npm run check` to verify SDK and compiler hashes and ensure compiled geometry matches the authored SVGs. Browser gameplay, context-loss recovery, and 100/400-actor measurements still require a browser run; CPU submission time is not a GPU-time measurement.
+
 ## 0.14.3 · 화면 전환 시 손길 정리
 
 볼을 누르는 중 작업대 탭을 바꾸거나 회전/너비 변경으로 입력 좌표계가 바뀌면 진행 중인 손길을 취소합니다. 완료한 작업·보상은 유지하며 숨은 화면에서 누름이 계속되지 않습니다. 기존 취소 경로를 사용하며 판정·물리·전투 규칙은 변경하지 않습니다.

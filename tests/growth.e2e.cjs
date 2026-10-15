@@ -2,11 +2,12 @@
 // Only the initial saved profile is a fixture. Combat and input use production paths.
 const {chromium}=require(process.env.PLAYWRIGHT_PATH||'playwright');
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict');
+const createStaticServer=require('./static-server.cjs');
 const root=path.resolve(__dirname,'..'),out=path.join(root,'artifacts','growth');fs.mkdirSync(out,{recursive:true});
 const report={status:'RUNNING',checks:[],errors:[],limitations:['Initial returning-player profile contains 100 previously earned shells','Physical mobile devices and human audio listening not tested']};
 const timer=setTimeout(()=>{console.error('180 second scenario limit');process.exit(1)},180000);let browser,server;
 const pass=(name,evidence)=>{report.checks.push({name,evidence});console.log('PASS',name)};
-(async()=>{server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html; charset=utf-8');r.end(fs.readFileSync(path.join(root,'index.html')))});await new Promise(r=>server.listen(0,'127.0.0.1',r));browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
+(async()=>{server=createStaticServer({root});await new Promise(r=>server.listen(0,'127.0.0.1',r));browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
  const page=await browser.newPage({viewport:{width:1365,height:900}});page.on('pageerror',e=>report.errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>window.BloomHatchery);
  await page.evaluate(()=>localStorage.setItem('bloom.waxHatchery.profile',JSON.stringify({version:'0.13.0',shells:100,collection:{'1-0':2},records:{hatches:2,perfect:1,bestWave:1,wins:0},settings:{volume:0,motion:true}})));await page.reload();await page.waitForFunction(()=>window.BloomHatchery);
  const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());assert.equal((await inspect()).profile.collection['1-0'],2);

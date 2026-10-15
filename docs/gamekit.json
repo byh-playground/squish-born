@@ -1,19 +1,48 @@
 {
-  "tag": "v0.3.1",
-  "distCommit": "72b09b260edf9650353017acb49c06873fe9f5a1",
-  "manifestSha256": "c713809653043e8eb1d9b629c0c2734e9526217f69e04b49283d068c1b5d7da7",
+  "tag": "v0.6.3",
+  "sourceCommit": "236974f43e1f56c77cc98cbd94e981236af90bf0",
+  "distCommit": "e51471f340ea5e40ddbb70964510b8928696cf6c",
+  "manifestSha256": "b60e231a9a3b583db60346d7fa236b676550a88dda2f245e1d3d541669a0647d",
+  "compiledAssetManifestSha256": "e08d9711c5ee1ae1e722de60810ecf24e595f4bc33b3ac499aac88d35166062b",
+  "distManifestPath": "assets/gamekit/manifest.json",
   "modules": [
+    {
+      "name": "rendering",
+      "path": "assets/gamekit/rendering.js",
+      "sha256": "f4408f8b2f7f5d8d4ae2022efac9906e299fb0dca5f2da6b0f73dd0360aae687",
+      "bytes": 165832,
+      "delivery": "local ESM"
+    },
+    {
+      "name": "vector-assets",
+      "path": "assets/gamekit/vector-assets.js",
+      "sha256": "73e68b83b3ab7fd259a1f5893c684f89e34bb53cc8a7bc3153646c313841b871",
+      "bytes": 127403,
+      "delivery": "local ESM"
+    },
     {
       "name": "input",
       "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168",
-      "bytes": 17695
+      "bytes": 17695,
+      "delivery": "embedded data URL ESM"
     },
     {
       "name": "simloop",
       "sha256": "1be543dc7e15ef7c87043af98a1fb49a0a45a779098bfa085dc7509709f1ea9c",
-      "bytes": 50899
+      "bytes": 50899,
+      "delivery": "embedded data URL ESM"
     }
   ],
-  "delivery": "Exact official modules embedded as data URL ESM in the single HTML",
-  "sourceCommit": "baa96876876a08013ad28b5a71c83bfadd285fab"
+  "compiler": {
+    "name": "GameKit vector-assets compiler",
+    "version": "0.5.0",
+    "sourceCommit": "8478ad859fe3cc6fd095032df32806a085bfa1f4",
+    "compilerSha256": "2884f484031a429952375935bf8c79bcd4a6c09732a94a5255701dbd36929ffc",
+    "schemaSha256": "7b9060d4a6cbd5c7e32f7923c34fbf232571a804a34211bf60e57ca1261942c8",
+    "buildDependencies": {
+      "three": "0.186.1",
+      "@xmldom/xmldom": "0.9.12"
+    }
+  },
+  "delivery": "Pinned GameKit ESM, authored SVG sources, and deterministic retained geometry generated from those SVGs"
 }

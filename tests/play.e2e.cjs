@@ -1,12 +1,13 @@
 const {chromium}=require(process.env.PLAYWRIGHT_PATH||'playwright');
 const fs=require('fs'),http=require('http'),path=require('path'),crypto=require('crypto'),assert=require('assert/strict');
+const createStaticServer=require('./static-server.cjs');
 const root=process.env.GAME_ROOT||path.resolve(__dirname,'..');
 const result={started:new Date().toISOString(),checks:[],errors:[],limitations:['Physical mobile devices and human audio listening not tested','Full five-wave balance and every material/trait combination not tested','No multiplayer mode exists']};
 const watchdog=setTimeout(()=>{console.error('180 second verification limit exceeded');process.exit(1)},180000);
 let server,browser;
 async function main(){
  let url=process.env.TEST_URL;
- if(!url){server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html; charset=utf-8');r.end(fs.readFileSync(process.env.TEST_HTML||path.join(root,'index.html')))});await new Promise(r=>server.listen(0,'127.0.0.1',r));url=`http://127.0.0.1:${server.address().port}/`}
+ if(!url){server=createStaticServer({root,html:fs.readFileSync(process.env.TEST_HTML||path.join(root,'index.html'))});await new Promise(r=>server.listen(0,'127.0.0.1',r));url=`http://127.0.0.1:${server.address().port}/`}
  const screenshotDir=process.env.SCREENSHOT_DIR||path.join(root,'artifacts');fs.mkdirSync(screenshotDir,{recursive:true});result.url=url;browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});result.browser=browser.version();
  function pass(name,evidence){result.checks.push({name,status:'PASS',evidence});console.log('PASS',name)}
  for(const touch of [false,true]){
@@ -15,8 +16,8 @@ async function main(){
   const response=await page.goto(url);const bytes=await response.body();result.htmlSha256=crypto.createHash('sha256').update(bytes).digest('hex');
   await page.waitForFunction(()=>!!window.BloomHatchery);
   const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());
-  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'72b09b260edf9650353017acb49c06873fe9f5a1');assert.equal(state.gamekit.running,true)}
-  pass(mode+' boot',{version:state.build.version,frames:state.render.frames});
+  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'e51471f340ea5e40ddbb70964510b8928696cf6c');assert.deepEqual(state.gamekit.modules,['rendering','vector-assets','input','simloop']);assert.equal(state.gamekit.running,true)}
+  const field=await page.locator('#field').boundingBox();assert.ok(field?.height>0,mode+' field canvas must be visible');for(const name of ['field','hatch'])assert.ok(state.render.systems[name].mesh.retainedBytes<=32*1024*1024,name+' must remain inside GameKit 32 MiB retained-mesh budget');pass(mode+' boot',{version:state.build.version,frames:state.render.frames,fieldHeight:field.height,meshMiB:Object.fromEntries(['field','hatch'].map(name=>[name,+(state.render.systems[name].mesh.retainedBytes/1048576).toFixed(2)]))});
   await page.click('#practiceBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.state==='running');
   const cdp=touch?await context.newCDPSession(page):null;
   async function down(){const p=await page.evaluate(()=>{const b=BloomHatchery.inspect().simulation.eggs[0].best;return BloomHatchery.point(0,b.x,b.y)});if(touch)await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p.x,y:p.y,radiusX:4,radiusY:4,force:1,id:1}]});else{await page.mouse.move(p.x,p.y);await page.mouse.down()}}
@@ -30,7 +31,7 @@ async function main(){
   if(touch){await up(true)}else{await page.keyboard.press('Escape');await up();await page.click('#resumeBtn')}
   await page.waitForTimeout(100);state=await inspect();assert.equal(state.simulation.eggs[0].press,null);assert.equal(state.simulation.eggs[0].progress,0);pass(mode+' cancel preserves ball and clears press');
   async function hatch(grade){const before=(await inspect()).simulation;const cycles=before.eggs[0].air.target;
-   for(let i=0;i<cycles;i++){await down();await page.waitForFunction(g=>{const e=BloomHatchery.inspect().simulation.eggs[0];if(!e.press)return false;const offset=g==='good'?-.12:0;return e.press.elapsed>=e.press.threshold+offset},grade,{polling:'raf'});result.audioPeak=Math.max(result.audioPeak||0,await page.evaluate(()=>BloomHatchery.sampleAudio()));await up();await page.waitForTimeout(65)}
+   for(let i=0;i<cycles;i++){await down();await page.waitForFunction(({grade,touch})=>{const e=BloomHatchery.inspect().simulation.eggs[0];if(!e.press)return false;const offset=grade==='good'?-.12:(touch?-.08:0);return e.press.elapsed>=e.press.threshold+offset},{grade,touch},{polling:'raf'});result.audioPeak=Math.max(result.audioPeak||0,await page.evaluate(()=>BloomHatchery.sampleAudio()));await up();await page.waitForTimeout(65)}
    const after=(await inspect()).simulation;assert.equal(after.stats.hatches-before.stats.hatches,1);assert.equal(after.stats.deployed-before.stats.deployed,grade==='perfect'?3:1);if(grade==='perfect'){assert.equal(after.stats.pristine-before.stats.pristine,1)}else assert.equal(after.stats.perfect-before.stats.perfect,0);
    const rewards=after.resources.shells;if(!touch)await up();await page.waitForTimeout(1100);const stable=(await inspect()).simulation;assert.equal(stable.stats.hatches,after.stats.hatches);assert.equal(stable.resources.shells,rewards);pass(mode+' '+grade+' hatch and no duplicate reward',{cycles,deployed:after.stats.deployed-before.stats.deployed,shells:rewards-before.resources.shells});
   }
