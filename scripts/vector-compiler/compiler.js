@@ -333,6 +333,9 @@ function seeded(seed, index, salt = 0) {
   value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35);
   return ((value ^ (value >>> 16)) >>> 0) / 0x100000000;
 }
+const yarnHash = value => { const result = Math.sin(value * 127.1 + 311.7) * 43758.5453; return result - Math.floor(result); };
+const yarnRandom = (seed, index, salt) => yarnHash(seed * 57.13 + index * 113.71 + salt * 3.1);
+
 function inRing(point, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -475,6 +478,62 @@ function appendClippedStrokeGeometry(vertices, geometry, rgba, partIndex, info) 
   }
 }
 
+function appendYarnTriangle(vertices, points, rgba, partIndex, info, colorAt) {
+  const emit = triangle => {
+    if (info) emitClippedTriangle(vertices, triangle, rgba, partIndex, info, colorAt);
+    else for (const point of triangle) emitStyleVertex(vertices, point, colorAt ? colorAt(point) : rgba, partIndex);
+  };
+  const gradientT = colorAt?.gradientT, stops = colorAt?.gradientStops;
+  if (!gradientT || !stops?.length) { emit(points); return; }
+  const values = points.map(gradientT), low = Math.min(...values), high = Math.max(...values);
+  const cuts = [...new Set(stops.filter(offset => offset > low + 1e-9 && offset < high - 1e-9))].sort((a, b) => a - b);
+  if (!cuts.length) { emit(points); return; }
+  const boundaries = [low, ...cuts, high];
+  for (let band = 0; band + 1 < boundaries.length; band++) {
+    const lower = boundaries[band], upper = boundaries[band + 1];
+    if (upper - lower < 1e-9) continue;
+    let polygon = clipGradientPolygon(points, gradientT, lower, true);
+    polygon = clipGradientPolygon(polygon, gradientT, upper, false);
+    for (let corner = 1; corner + 1 < polygon.length; corner++) {
+      if (Math.abs(cross(polygon[0], polygon[corner], polygon[corner + 1])) < 1e-8) continue;
+      emit([polygon[0], polygon[corner], polygon[corner + 1]]);
+    }
+  }
+}
+
+function appendYarnStroke(vertices, points, width, rgba, partIndex, info = null, colorAt = null) {
+  if (points.length < 2 || width <= 0) return;
+  const triangle = (a, b, c) => {
+    appendYarnTriangle(vertices, [a, b, c], rgba, partIndex, info, colorAt);
+  };
+  const radius = width / 2, segments = points.length - 1, normals = [];
+  for (let index = 0; index < segments; index++) {
+    const start = points[index], end = points[index + 1], dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
+    if (length < 1e-6) { normals.push(null); continue; }
+    const nx = -dy / length * radius, ny = dx / length * radius;
+    normals.push({ x: nx, y: ny });
+    const a = { x: start.x + nx, y: start.y + ny }, b = { x: start.x - nx, y: start.y - ny };
+    const c = { x: end.x - nx, y: end.y - ny }, d = { x: end.x + nx, y: end.y + ny };
+    triangle(a, b, c); triangle(a, c, d);
+  }
+  for (let index = 1; index < points.length - 1; index++) {
+    const before = normals[index - 1], after = normals[index];
+    if (!before || !after) continue;
+    const point = points[index];
+    triangle(point, { x: point.x + before.x, y: point.y + before.y }, { x: point.x + after.x, y: point.y + after.y });
+    triangle(point, { x: point.x - before.x, y: point.y - before.y }, { x: point.x - after.x, y: point.y - after.y });
+  }
+  const cap = center => {
+    const slices = 8;
+    for (let index = 0; index < slices; index++) {
+      const a = index / slices * Math.PI * 2, b = (index + 1) / slices * Math.PI * 2;
+      triangle(center, { x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius },
+        { x: center.x + Math.cos(b) * radius, y: center.y + Math.sin(b) * radius });
+    }
+  };
+  cap(points[0]); cap(points.at(-1));
+}
+
 function quadPoints(start, end, width) {
   const dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy) || 1;
   const nx = -dy / length * width / 2, ny = dx / length * width / 2;
@@ -522,6 +581,183 @@ function appendClippedPolyline(vertices, points, closed, width, rgba, partIndex,
 
 function colorScale(color, factor, alpha) {
   return colorComponents(color.clone().multiplyScalar(factor), alpha);
+}
+
+function curveMetric(points, closed = true) {
+  const lengths = [0], segmentCount = closed ? points.length : points.length - 1;
+  let area = 0;
+  for (let index = 0; index < segmentCount; index++) {
+    const a = points[index], b = points[(index + 1) % points.length];
+    lengths.push(lengths[index] + Math.hypot(b.x - a.x, b.y - a.y));
+    area += a.x * b.y - b.x * a.y;
+  }
+  const length = lengths[segmentCount] || 1e-5, sign = closed && area < 0 ? -1 : 1;
+  return { length, at(amount) {
+    const distance = (closed ? ((amount % 1) + 1) % 1 : clamp(amount, 0, 1)) * length;
+    let low = 0, high = segmentCount - 1;
+    while (low < high) { const middle = (low + high) >> 1; if (lengths[middle + 1] < distance) low = middle + 1; else high = middle; }
+    const a = points[low], b = points[(low + 1) % points.length], segmentLength = lengths[low + 1] - lengths[low] || 1;
+    const t = clamp((distance - lengths[low]) / segmentLength, 0, 1), tx = (b.x - a.x) / segmentLength, ty = (b.y - a.y) / segmentLength;
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, tx, ty, nx: sign * ty, ny: -sign * tx };
+  } };
+}
+
+function quadraticPoints(start, control, end, divisions = 8) {
+  return Array.from({ length: divisions + 1 }, (_, index) => {
+    const t = index / divisions, inverse = 1 - t;
+    return { x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+      y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y };
+  });
+}
+
+function cubicPoints(start, first, second, end, divisions = 8) {
+  return Array.from({ length: divisions + 1 }, (_, index) => {
+    const t = index / divisions, inverse = 1 - t;
+    return { x: inverse ** 3 * start.x + 3 * inverse ** 2 * t * first.x + 3 * inverse * t ** 2 * second.x + t ** 3 * end.x,
+      y: inverse ** 3 * start.y + 3 * inverse ** 2 * t * first.y + 3 * inverse * t ** 2 * second.y + t ** 3 * end.y };
+  });
+}
+
+function roundedOutline(points, holes) {
+  const shape = new Shape(), middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const first = middle(points.at(-1), points[0]);
+  shape.moveTo(first.x, first.y);
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index], next = points[(index + 1) % points.length], end = middle(point, next);
+    shape.quadraticCurveTo(point.x, point.y, end.x, end.y);
+  }
+  shape.closePath();
+  for (const ring of holes) {
+    const hole = new Path();
+    hole.moveTo(ring[0].x, ring[0].y);
+    for (const point of ring.slice(1)) hole.lineTo(point.x, point.y);
+    hole.closePath(); shape.holes.push(hole);
+  }
+  return shape;
+}
+
+function yarnTint(color, amount, opacity) {
+  const target = amount > 0 ? 1 : 0, weight = Math.abs(amount);
+  return [color[0] + (target - color[0]) * weight, color[1] + (target - color[1]) * weight,
+    color[2] + (target - color[2]) * weight, color[3] * opacity];
+}
+
+function compileYarnStyle(vertices, style, shape, fillColor, opacity, partIndex, gradient, gradientBounds, transform) {
+  const info = shapeInfo(shape, true), sourceMetric = curveMetric(info.contour);
+  const lobes = Math.max(8, Math.round(sourceMetric.length / style.edgeSpacing));
+  const amount = style.detail ? 0.3 : 1;
+  const relief = Math.min(style.edgeRelief, Math.min(info.width, info.height) * 0.115) * amount;
+  const scallops = [];
+  for (let index = 0; index < lobes * 5; index++) {
+    const u = index / (lobes * 5), point = sourceMetric.at(u);
+    const displacement = relief * (Math.sin(Math.PI * u * lobes) ** 2 * 0.85 + 0.18 * Math.sin(u * Math.PI * 4 + style.seed) + 0.1)
+      * (0.8 + 0.2 * Math.sin(u * Math.PI * 6 + style.seed * 0.7));
+    scallops.push({ x: point.x + point.nx * displacement, y: point.y + point.ny * displacement });
+  }
+  const outline = roundedOutline(scallops, info.holes);
+  const baseColor = gradient ? gradientColorAtT(gradient, 0.53) : colorComponents(fillColor, 1);
+  const dark = yarnTint(baseColor, -0.28, opacity), groove = yarnTint(baseColor, -(style.contrast), opacity * 0.85);
+  const yarn = yarnTint(baseColor, 0.1, opacity), light = yarnTint(baseColor, 0.38, opacity);
+  const gradientT = gradient ? (() => {
+    const [start, end] = gradientEndpoints(gradient, gradientBounds, transform);
+    const dx = end.x - start.x, dy = end.y - start.y, denominator = dx * dx + dy * dy;
+    return point => ((point.x - start.x) * dx + (point.y - start.y) * dy) / denominator;
+  })() : null;
+  const yarnColor = (tint, alpha = 1) => {
+    if (!gradient) return null;
+    const sampler = point => yarnTint(gradientColorAtT(gradient, gradientT(point)), tint, opacity * alpha);
+    sampler.gradientT = gradientT;
+    sampler.gradientStops = gradient.stops.map(stop => stop.offset);
+    return sampler;
+  };
+  const edgeDarkColor = yarnColor(-0.28, 0.7), edgeMainColor = yarnColor(0.1), edgeLightColor = yarnColor(0.38, 0.55);
+  const underColor = yarnColor(-0.28, 0.5), grooveColor = yarnColor(-style.contrast, 0.85);
+  const stitchColor = yarnColor(0.1), stitchLightColor = yarnColor(0.38, 0.57), crossLightColor = yarnColor(0.38, 0.5);
+  const fiberColor = yarnColor(0.22, style.fiberOpacity), fiberLightColor = yarnColor(0.38, style.fiberOpacity * 0.7);
+  if (gradient) appendGradientShape(vertices, outline, gradient, gradientBounds, transform, opacity, partIndex);
+  else {
+    const fill = new ShapeGeometry(outline, 24);
+    appendTriangles(vertices, fill, yarnTint(baseColor, 0, opacity), partIndex); fill.dispose();
+  }
+
+  const edge = curveMetric(scallops), edgeWidth = style.edgeWidth;
+  for (let index = 0; index < lobes; index++) {
+    const a0 = edge.at((index + 0.12) / lobes), b0 = edge.at((index + 0.85) / lobes), middle = edge.at((index + 0.5) / lobes);
+    const depth = edgeWidth * 0.62 * amount;
+    const start = { x: a0.x - a0.nx * depth, y: a0.y - a0.ny * depth };
+    const control = { x: middle.x + middle.nx * depth * 0.38, y: middle.y + middle.ny * depth * 0.38 };
+    const end = { x: b0.x - b0.nx * depth, y: b0.y - b0.ny * depth };
+    const loop = quadraticPoints(start, control, end, 6);
+    appendYarnStroke(vertices, loop, edgeWidth * 0.8, yarnTint(dark, 0, 0.7), partIndex, null, edgeDarkColor);
+    appendYarnStroke(vertices, loop, edgeWidth * 0.56, yarn, partIndex, null, edgeMainColor);
+    appendYarnStroke(vertices, loop.map(point => ({ x: point.x - edgeWidth * 0.1, y: point.y - edgeWidth * 0.09 })), edgeWidth * 0.17,
+      yarnTint(light, 0, 0.55), partIndex, null, edgeLightColor);
+  }
+
+  if (style.pattern !== false) {
+    const curved = style.curved !== false, stitchWidth = style.stitchWidth, stitchHeight = style.stitchHeight;
+    const columns = Math.min(128, Math.max(2, Math.ceil(info.width / stitchWidth)));
+    const rows = Math.min(128, Math.max(2, Math.ceil(info.height / stitchHeight)));
+    if (rows * columns > 16384) throw new RangeError('Yarn style tessellation exceeds the 16,384 stitch limit');
+    const sx = info.width / columns, sy = info.height / rows, rx = info.width / 2, ry = info.height / 2;
+    const strokeWidth = Math.min(sx, sy) * (style.thickness / stitchHeight);
+    const mapPoint = (x, y, ox = 0, oy = 0) => {
+      x += ox; y += oy;
+      const nx = x / rx, ny = y / ry;
+      return { x: info.center.x + (curved ? Math.sin(clamp(nx, -1.35, 1.35) * 1.1) / Math.sin(1.1) * rx : x),
+        y: info.center.y + y + (curved ? ry * 0.13 * nx * nx * (1 - ny * 0.24) : 0) };
+    };
+    const drawCellCurve = (x, y, ax, ay, data, rgba, width, offsetX = 0, offsetY = 0, colorAt = null) => {
+      const points = cubicPoints(
+        { x: x + ax * data[0], y: y + ay * data[1] },
+        { x: x + ax * data[2], y: y + ay * data[3] },
+        { x: x + ax * data[4], y: y + ay * data[5] },
+        { x: x + ax * data[6], y: y + ay * data[7] }, 5,
+      ).map(point => mapPoint(point.x, point.y, offsetX, offsetY));
+      appendYarnStroke(vertices, points, width, rgba, partIndex, info, colorAt);
+    };
+    let stitchCount = 0;
+    for (let row = -1; row <= rows + 1; row++) for (let column = -1; column <= columns + 1; column++) {
+      const jitter = style.irregularity, x = -rx + (column + 0.5) * sx + (yarnRandom(style.seed, row * columns + column, 71) - 0.5) * sx * jitter;
+      const y = -ry + (row + 0.5) * sy + (yarnRandom(style.seed, row * columns + column, 39) - 0.5) * sy * jitter;
+      const ax = sx * (1 + (yarnRandom(style.seed, row * columns + column, 57) - 0.5) * jitter);
+      const ay = sy * (1 + (yarnRandom(style.seed, row * columns + column, 91) - 0.5) * jitter);
+      const under = [-0.48, -0.46, -0.22, -0.57, 0.22, -0.57, 0.48, -0.46];
+      const leftLoop = [-0.34, -0.36, -0.32, -0.06, -0.18, 0.17, -0.025, 0.34];
+      const rightLoop = [0.34, -0.36, 0.32, -0.06, 0.18, 0.17, 0.025, 0.34];
+      drawCellCurve(x, y, ax, ay, under, yarnTint(dark, 0, 0.5), strokeWidth * 0.5, 0, strokeWidth * 0.06, underColor);
+      for (const loop of [leftLoop, rightLoop]) drawCellCurve(x, y, ax, ay, loop, groove, strokeWidth * 1.08, 0, strokeWidth * 0.06,
+        grooveColor);
+      for (const loop of [leftLoop, rightLoop]) drawCellCurve(x, y, ax, ay, loop, yarn, strokeWidth * 0.89, 0, 0,
+        stitchColor);
+      for (const loop of [leftLoop, rightLoop]) drawCellCurve(x, y, ax, ay, loop, yarnTint(light, 0, 0.57), strokeWidth * 0.34,
+        -strokeWidth * 0.14, -strokeWidth * 0.13, stitchLightColor);
+      if ((row + column) % 2 === 0) {
+        drawCellCurve(x, y, ax, ay, [-0.32, -0.12, -0.27, -0.13, -0.20, -0.15, -0.16, -0.13], yarnTint(light, 0, 0.5), strokeWidth * 0.075,
+          0, 0, crossLightColor);
+        drawCellCurve(x, y, ax, ay, [0.22, 0.18, 0.28, 0.14, 0.33, 0.11, 0.37, 0.08], yarnTint(light, 0, 0.5), strokeWidth * 0.075,
+          0, 0, crossLightColor);
+      }
+      if (++stitchCount > 16384) throw new RangeError('Yarn style tessellation exceeds the 16,384 stitch limit');
+    }
+  }
+
+  if (style.fiber !== false) {
+    const fiberCount = Math.min(style.fiberMax, Math.round(edge.length / (style.fiberSpacing ?? 4)));
+    for (let index = 0; index < fiberCount; index++) {
+      const at = edge.at((index + 0.22 + yarnRandom(style.seed, index, 22) * 0.48) / fiberCount);
+      const length = Math.min(style.fiberLength, Math.min(info.width, info.height) / 2 * 0.24) * (0.45 + yarnRandom(style.seed, index, 5) * 0.95);
+      const lean = (yarnRandom(style.seed, index, 14) - 0.5) * length * 1.5;
+      const start = { x: at.x - at.nx * 0.008, y: at.y - at.ny * 0.008 };
+      const control = { x: at.x + at.nx * length * 0.64 + at.tx * lean, y: at.y + at.ny * length * 0.64 + at.ty * lean };
+      const end = { x: at.x + at.nx * length + at.tx * lean * 0.48, y: at.y + at.ny * length + at.ty * lean * 0.48 };
+      appendYarnStroke(vertices, quadraticPoints(start, control, end, 3), style.fiberWidth, yarnTint(baseColor, 0.22, opacity * style.fiberOpacity), partIndex, null,
+        fiberColor);
+      const tipStart = { x: at.x + at.nx * length * 0.48 + at.tx * lean * 0.25, y: at.y + at.ny * length * 0.48 + at.ty * lean * 0.25 };
+      appendYarnStroke(vertices, [tipStart, end], style.fiberWidth * 0.4, yarnTint(light, 0, opacity * style.fiberOpacity * 0.7), partIndex, null,
+        fiberLightColor);
+    }
+  }
 }
 
 function resampleClosed(points, count) {
@@ -588,39 +824,8 @@ function colorFromComponents(rgba) {
   return new Color().setRGB(rgba[0], rgba[1], rgba[2], SRGBColorSpace);
 }
 
-function compileYarnShaderSurface(style, shape, fillColor, opacity, partIndex, gradient, gradientBounds, transform) {
-  const geometry = new ShapeGeometry(shape, 24), position = geometry.attributes.position, index = geometry.index;
-  const count = index ? index.count : position.count, fill = [];
-  const rgbaAt = point => {
-    const color = gradient ? gradientAtPoint(gradient, point, gradientBounds, transform) : colorComponents(fillColor, 1);
-    return [color[0], color[1], color[2], color[3] * opacity];
-  };
-  for (let triangle = 0; triangle + 2 < count; triangle += 3) {
-    for (let corner = 0; corner < 3; corner++) {
-      const at = triangle + corner, vertex = index ? index.getX(at) : at;
-      const point = { x: position.getX(vertex), y: position.getY(vertex) };
-      fill.push(point.x, point.y, ...rgbaAt(point));
-    }
-  }
-  geometry.dispose();
-  const extracted = shape.extractPoints(24);
-  if (extracted.holes.length) throw new TypeError('Yarn shader surfaces support one exterior SVG contour and no interior contours: ' + style.target);
-  const contour = extracted.shape;
-  const outline = new Float32Array(contour.flatMap(point => [point.x, point.y]));
-  const edgeColors = gradient ? new Float32Array(contour.flatMap(point => rgbaAt(point))) : undefined;
-  if (fill.length < 18) throw new TypeError('Authored yarn surface needs filled triangles: ' + style.target);
-  return { target: style.target, partIndex, style: { ...style }, fillVertices: new Float32Array(fill), outline,
-    ...(edgeColors ? { edgeColors } : {}) };
-}
-
 function compilePaths(paths, partIndices, parts, metadata, gradients) {
   const vertices = [];
-  const yarnSurfaces = [], paintOrder = [];
-  let meshRunStart = null;
-  const flushMeshRun = end => {
-    if (meshRunStart !== null && end > meshRunStart) paintOrder.push({ kind: 'mesh', firstVertex: meshRunStart / 11, lastVertex: end / 11 });
-    meshRunStart = null;
-  };
   const styled = new Map((metadata.styles ?? []).map(style => [style.target, style]));
   const morphCount = metadata.styles?.some(style => style.kind === 'sketch') ? 2 : 0;
   for (const path of paths) {
@@ -633,7 +838,6 @@ function compilePaths(paths, partIndices, parts, metadata, gradients) {
     if (authoredStyle && (style.fill === undefined || style.fill === 'none')) throw new TypeError('Authored yarn/sketch styles require an SVG fill: ' + authoredStyle.target);
     const fillGradient = style.fill !== undefined && style.fill !== 'none' ? resolveGradientPaint(style.fill, gradients) : null;
     const fillOpacity = (style.fillOpacity ?? 1) * overallOpacity;
-    const pathVertexStart = vertices.length;
     const shapes = style.fill !== undefined && style.fill !== 'none' ? path.toShapes() : [];
     const gradientBounds = fillGradient && shapes.length
       ? shapeBounds(shapes, fillGradient.units === 'objectBoundingBox' ? path.userData.transform : null) : null;
@@ -641,13 +845,8 @@ function compilePaths(paths, partIndices, parts, metadata, gradients) {
 
     if (authoredStyle?.kind === 'yarn') {
       if (shapes.length !== 1) throw new TypeError('Authored yarn style currently requires one connected filled shape: ' + authoredStyle.target);
-      flushMeshRun(vertices.length);
-      if (fillOpacity > 0) {
-        const surface = compileYarnShaderSurface(authoredStyle, shapes[0], path.color, fillOpacity, partIndex,
-          fillGradient, gradientBounds, path.userData.transform);
-        yarnSurfaces.push(surface);
-        paintOrder.push({ kind: 'yarn', surface: yarnSurfaces.length - 1 });
-      }
+      if (fillOpacity > 0) compileYarnStyle(vertices, authoredStyle, shapes[0], path.color, fillOpacity, partIndex,
+        fillGradient, gradientBounds, path.userData.transform);
     } else {
       if (fillOpacity > 0) for (const shape of shapes) {
         if (fillGradient) appendGradientShape(vertices, shape, fillGradient, gradientBounds, path.userData.transform, fillOpacity, partIndex);
@@ -662,8 +861,6 @@ function compilePaths(paths, partIndices, parts, metadata, gradients) {
         if (fillOpacity > 0) compileSketchStyle(vertices, authoredStyle, shapes[0], styleColor, fillOpacity, partIndex);
       }
     }
-    const pathMeshStart = authoredStyle?.kind === 'yarn' ? vertices.length : pathVertexStart;
-    if (vertices.length > pathMeshStart && meshRunStart === null) meshRunStart = pathMeshStart;
     if (style.stroke !== undefined && style.stroke !== 'none' && style.strokeWidth > 0) {
       const opacity = (style.strokeOpacity ?? 1) * overallOpacity;
       if (opacity > 0) {
@@ -678,12 +875,7 @@ function compilePaths(paths, partIndices, parts, metadata, gradients) {
         }
       }
     }
-    if (vertices.length > pathMeshStart && meshRunStart === null) meshRunStart = pathMeshStart;
-    if (authoredStyle?.kind === 'yarn') flushMeshRun(vertices.length);
   }
-  flushMeshRun(vertices.length);
-  const shaderOnlyPlaceholder = !vertices.length && yarnSurfaces.length > 0;
-  if (!vertices.length && yarnSurfaces.length) for (const [x, y] of [[0, 0], [1, 0], [0, 1]]) vertices.push(x, y, 1, 1, 1, 0, 0, 0, 0, 0, 0);
   if (!vertices.length || vertices.length % 33) throw new TypeError('SVG did not produce complete painted triangles');
   const expanded = new Float32Array(vertices);
   const uniqueVertices = [], indices = [], vertexIds = new Map();
@@ -699,16 +891,7 @@ function compilePaths(paths, partIndices, parts, metadata, gradients) {
     }
     indices.push(index);
   }
-  const retainedIndices = new Uint16Array(indices), expressionIndices = {}, orderedLayers = [];
-  let meshLayer = 0;
-  for (const layer of paintOrder) {
-    if (layer.kind === 'yarn') { orderedLayers.push(layer); continue; }
-    const name = `paint_${meshLayer++}`;
-    expressionIndices[name] = retainedIndices.slice(layer.firstVertex, layer.lastVertex);
-    orderedLayers.push({ kind: 'mesh', indexVariant: name });
-  }
-  return { vertices: new Float32Array(uniqueVertices), ...(shaderOnlyPlaceholder ? {} : { indices: retainedIndices }),
-    expressionIndices, morphCount, yarnSurfaces, paintOrder: orderedLayers };
+  return { vertices: new Float32Array(uniqueVertices), indices: new Uint16Array(indices), morphCount };
 }
 
 function compileSourcePaths(paths, partIndices, parts) {
@@ -814,7 +997,6 @@ export function compileVectorAsset(svgBytes, sourcePath = 'asset.svg') {
   });
   const paths = withNodeDomParser(() => vectorText.loader.parse(vectorText.clean).paths);
   const geometry = compilePaths(paths, partIndices, metadata.parts, metadata, gradients);
-  const { yarnSurfaces, paintOrder, ...meshGeometry } = geometry;
   const sourcePaths = compileSourcePaths(paths, partIndices, metadata.parts);
   const paintedIds = new Set(paths.map(path => path.userData.node.getAttribute('id')));
   const shapeNodes = [...ids.values()].filter(node => ['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon'].includes(node.nodeName));
@@ -827,9 +1009,7 @@ export function compileVectorAsset(svgBytes, sourcePath = 'asset.svg') {
     metadata,
     viewBox,
     sourcePaths,
-    yarnSurfaces,
-    paintOrder,
-    geometry: { ...meshGeometry, strideFloats: 11, partCount: metadata.parts.length },
+    geometry: { ...geometry, strideFloats: 11, partCount: metadata.parts.length },
   };
 }
 
