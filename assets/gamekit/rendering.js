@@ -132,14 +132,14 @@ var WebGLDevice = class {
   }
   _pipeline(record) {
     const gl = this.gl;
-    let vertex, fragment2, program;
+    let vertex, fragment3, program;
     try {
       vertex = compile(gl, gl.VERTEX_SHADER, record.vertex);
-      fragment2 = compile(gl, gl.FRAGMENT_SHADER, record.fragment);
+      fragment3 = compile(gl, gl.FRAGMENT_SHADER, record.fragment);
       program = gl.createProgram();
       if (!program) throw new Error("Program allocation failed");
       gl.attachShader(program, vertex);
-      gl.attachShader(program, fragment2);
+      gl.attachShader(program, fragment3);
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`Program link failed: ${gl.getProgramInfoLog(program)}`);
       record.locations = record.attributes.map((attribute) => ({ ...attribute, location: gl.getAttribLocation(program, attribute.name) }));
@@ -151,13 +151,13 @@ var WebGLDevice = class {
       throw error;
     } finally {
       if (vertex) gl.deleteShader(vertex);
-      if (fragment2) gl.deleteShader(fragment2);
+      if (fragment3) gl.deleteShader(fragment3);
     }
   }
   /** Attributes use interleaved FLOAT components and byte offsets in their vertex/instance source. */
-  createPipeline({ vertex, fragment: fragment2, stride, instanceStride = 0, attributes, uniforms = {} }) {
+  createPipeline({ vertex, fragment: fragment3, stride, instanceStride = 0, attributes, uniforms = {} }) {
     this._ready();
-    if (typeof vertex !== "string" || typeof fragment2 !== "string") throw new TypeError("Shader sources required");
+    if (typeof vertex !== "string" || typeof fragment3 !== "string") throw new TypeError("Shader sources required");
     integer(stride, "stride", 4, 255);
     if (stride % 4) throw new RangeError("stride must align to FLOAT");
     integer(instanceStride, "instanceStride", 0, 255);
@@ -177,7 +177,7 @@ var WebGLDevice = class {
     }
     if (!uniforms || typeof uniforms !== "object") throw new TypeError("uniform descriptors required");
     for (const type of Object.values(uniforms)) if (!UNIFORMS.has(type)) throw new TypeError(`Unsupported uniform ${type}`);
-    const record = { vertex, fragment: fragment2, stride, instanceStride, instanced: attributes.some((a) => a.source === "instance"), attributes: attributes.map((a) => ({ ...a, source: a.source ?? "vertex" })), uniforms: { ...uniforms }, gpu: null };
+    const record = { vertex, fragment: fragment3, stride, instanceStride, instanced: attributes.some((a) => a.source === "instance"), attributes: attributes.map((a) => ({ ...a, source: a.source ?? "vertex" })), uniforms: { ...uniforms }, gpu: null };
     this._pipeline(record);
     const handle = Object.freeze({ stride, instanceStride });
     this.pipelines.set(handle, record);
@@ -1226,16 +1226,35 @@ var ATTRIBUTES = [
   { name: "a_part", size: 1, offset: 40 }
 ];
 var INSTANCE_ATTRIBUTES = ["i_row0", "i_row1", "i_color", "i_params"].map((name, i) => ({ name, size: 4, offset: i * 16, source: "instance" }));
-function shader(instanced, partCount, morphCount, clipped) {
+function shader(instanced, partCount, morphCount, clipped, nonScalingStroke) {
   const inputs = ["i_row0", "i_row1", "i_color", "i_params"].map((name) => `${instanced ? "attribute" : "uniform"} vec4 ${name};`).join("\n");
   const local = morphCount ? "a_position+a_morph.xy*(i_params.x" + (partCount > 1 ? "+pose.x" : "") + ")" + (morphCount > 1 ? "+a_morph.zw*(i_params.y" + (partCount > 1 ? "+pose.y" : "") + ")" : "") : "a_position";
+  const strokeInputs = nonScalingStroke ? "attribute vec4 a_stroke;uniform vec2 u_strokeViewportSize;" : "";
+  const strokeVarying = clipped && nonScalingStroke ? "uniform mat3 u_inverseProjection;" : "";
+  const strokePosition = nonScalingStroke ? `
+vec2 tangentLocal=local+a_stroke.xy;
+vec2 tangentPart=${partCount > 1 ? "vec2(dot(row0.xyz,vec3(tangentLocal,1.0)),dot(row1.xyz,vec3(tangentLocal,1.0)))" : "tangentLocal"};
+vec2 tangentWorld=vec2(dot(i_row0.xyz,vec3(tangentPart,1.0)),dot(i_row1.xyz,vec3(tangentPart,1.0)));
+vec3 tangentProjected=u_projection*vec3(tangentWorld,1.0);
+vec2 tangent=(tangentProjected.xy/tangentProjected.z-projected.xy/projected.z)*u_strokeViewportSize*0.5;float tangentLength=length(tangent);
+if(dot(a_stroke.xy,a_stroke.xy)>0.5){
+  if(tangentLength<0.000001){projected.z=0.0;}
+  else{
+    tangent/=tangentLength;vec2 normal=vec2(-tangent.y,tangent.x);
+    vec2 pxOffset=tangent*a_stroke.z+normal*a_stroke.w;
+    vec2 clipOffset=pxOffset*2.0/u_strokeViewportSize;
+    projected.xy+=clipOffset*projected.z;
+    ${clipped ? "vec3 clippedWorld=u_inverseProjection*vec3(projected.xy,projected.z);v_position=clippedWorld.xy/clippedWorld.z;" : ""}
+  }
+}` : "";
   return `attribute vec2 a_position; attribute vec4 a_color; ${morphCount ? "attribute vec4 a_morph;" : ""} ${partCount > 1 ? "attribute float a_part;uniform vec4 u_parts[" + partCount * 3 + "];" : ""}
-${inputs}
-uniform mat3 u_projection; varying vec4 v_color; ${clipped ? "varying vec2 v_position;" : ""}
+${inputs}${strokeInputs}
+uniform mat3 u_projection; varying vec4 v_color; ${clipped ? "varying vec2 v_position;" : ""}${strokeVarying}
 void main(){${partCount > 1 ? "int index=int(a_part)*3;vec4 row0=u_parts[index];vec4 row1=u_parts[index+1];vec4 pose=u_parts[index+2];" : ""}
 vec2 local=${local};vec2 p=${partCount > 1 ? "vec2(dot(row0.xyz,vec3(local,1.0)),dot(row1.xyz,vec3(local,1.0)))" : "local"};
 vec2 world=vec2(dot(i_row0.xyz,vec3(p,1.0)),dot(i_row1.xyz,vec3(p,1.0)));
-vec3 projected=u_projection*vec3(world,1.0);gl_Position=vec4(projected.xy,(i_params.w+${partCount > 1 ? "pose.w" : "0.0"})*projected.z,projected.z);${clipped ? "v_position=world;" : ""}
+vec3 projected=u_projection*vec3(world,1.0);${clipped ? "v_position=world;" : ""}${strokePosition}
+gl_Position=vec4(projected.xy,(i_params.w+${partCount > 1 ? "pose.w" : "0.0"})*projected.z,projected.z);
 vec4 color=mix(a_color*i_color,i_color,i_row1.w);color.a*=i_row0.w${partCount > 1 ? "*pose.z" : ""};
 color.rgb=mix(color.rgb,vec3(1.0),i_params.z);v_color=vec4(color.rgb*color.a,color.a);}`;
 }
@@ -1248,6 +1267,13 @@ void main(){for(int i=0;i<${maxPlanes};i++){if(i>=u_planeCount)break;if(dot(u_pl
 function finiteArray2(value, size, name) {
   if (!value || value.length !== size) throw new TypeError(`${name}: ${size} finite numbers required`);
   for (let i = 0; i < size; i++) if (!Number.isFinite(value[i])) throw new TypeError(`${name}: ${size} finite numbers required`);
+}
+function invertProjection(projection) {
+  const [a, d, g, b, e, h, c, f, i] = projection;
+  const A = e * i - f * h, B = f * g - d * i, C = d * h - e * g, D = c * h - b * i, E = a * i - c * g, F = b * g - a * h, G = b * f - c * e, H = c * d - a * f, I = a * e - b * d;
+  const determinant = a * A + b * B + c * C;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) throw new RangeError("Non-scaling strokes require an invertible projection");
+  return Float32Array.from([A, B, C, D, E, F, G, H, I], (value) => value / determinant);
 }
 function packParts(parts, count, output) {
   if (parts !== null && (!Array.isArray(parts) || parts.length !== count)) throw new TypeError("One pose per authored mesh part required");
@@ -1316,7 +1342,9 @@ var MeshRenderer = class {
     this.pending = null;
     this.planes = new Float32Array(this.maxPlanes * 3);
     this.partScratch = new Float32Array(16 * 12);
-    this.metrics = { draws: 0, instances: 0, geometryUploads: 0, geometryBytesUploaded: 0, instanceBytesUploaded: 0, partUniformBytesSubmitted: 0 };
+    this.alphaRunScratch = [];
+    this.alphaRunCache = /* @__PURE__ */ new WeakMap();
+    this.metrics = { draws: 0, instances: 0, geometryUploads: 0, geometryBytesUploaded: 0, instanceBytesUploaded: 0, partUniformBytesSubmitted: 0, alphaRunCacheHits: 0, alphaRunCacheMisses: 0 };
     this.state = "ready";
     this.failure = null;
     this.onLost = () => {
@@ -1329,6 +1357,7 @@ var MeshRenderer = class {
         for (const mesh of this.meshes) {
           device.uploadVertices(mesh.buffer, mesh.vertices);
           if (mesh.indices) device.uploadIndices(mesh.indexBuffer, mesh.indices);
+          for (const variant of mesh.expressionIndices.values()) if (variant.indices.length) device.uploadIndices(variant.indexBuffer, variant.indices);
         }
         this.state = "ready";
         this.failure = null;
@@ -1342,19 +1371,25 @@ var MeshRenderer = class {
     this.disposed = false;
   }
   _pipeline(mesh, clipped) {
-    const key = mesh.partCount + ":" + mesh.morphCount + ":" + Number(clipped);
+    const key = mesh.partCount + ":" + mesh.morphCount + ":" + Number(clipped) + ":" + Number(mesh.hasNonScalingStroke);
     let pipeline = this.pipelines.get(key);
     if (pipeline) return pipeline;
     const uniforms = { u_projection: "matrix3fv" };
     if (clipped) Object.assign(uniforms, { "u_planes[0]": "3fv", u_planeCount: "1i" });
+    if (mesh.hasNonScalingStroke) {
+      uniforms.u_strokeViewportSize = "2f";
+      if (clipped) uniforms.u_inverseProjection = "matrix3fv";
+    }
     if (mesh.partCount > 1) uniforms["u_parts[0]"] = "4fv";
     if (!this.instanced) for (const name of ["i_row0", "i_row1", "i_color", "i_params"]) uniforms[name] = "4f";
     pipeline = this.device.createPipeline({
-      vertex: shader(this.instanced, mesh.partCount, mesh.morphCount, clipped),
+      vertex: shader(this.instanced, mesh.partCount, mesh.morphCount, clipped, mesh.hasNonScalingStroke),
       fragment: fragment(this.maxPlanes, clipped),
-      stride: 44,
+      stride: mesh.strideFloats * 4,
       ...this.instanced ? { instanceStride: 64 } : {},
-      attributes: [...ATTRIBUTES, ...this.instanced ? INSTANCE_ATTRIBUTES : []],
+      attributes: [...mesh.hasNonScalingStroke ? ATTRIBUTES.filter((attribute) => attribute.name !== "a_morph") : ATTRIBUTES, ...mesh.hasNonScalingStroke ? [
+        { name: "a_stroke", size: 4, offset: 24 }
+      ] : [], ...this.instanced ? INSTANCE_ATTRIBUTES : []],
       uniforms
     });
     this.pipelines.set(key, pipeline);
@@ -1363,24 +1398,39 @@ var MeshRenderer = class {
   createMesh(data) {
     this._ready();
     const indices = data?.indices;
-    if (!(data?.vertices instanceof Float32Array) || data.vertices.length < 33 || data.vertices.length % 11 || data.strideFloats !== 11 || !Number.isSafeInteger(data.partCount) || data.partCount < 1 || data.partCount > 16 || !Number.isSafeInteger(data.morphCount) || data.morphCount < 0 || data.morphCount > 2 || indices !== void 0 && (!(indices instanceof Uint16Array) || indices.length < 3 || indices.length % 3 || data.vertices.length / 11 > 65536 || indices.some((index) => index >= data.vertices.length / 11)) || indices === void 0 && data.vertices.length % 33) throw new TypeError("Mesh geometry with complete triangles and 1..16 parts required");
+    const expressionIndices = data?.expressionIndices === void 0 ? {} : data.expressionIndices;
+    const nonScalingStroke = data?.nonScalingStroke ?? false;
+    if (!(data?.vertices instanceof Float32Array) || data.vertices.length < 33 || data.vertices.length % 11 || data.strideFloats !== 11 || typeof nonScalingStroke !== "boolean" || !Number.isSafeInteger(data.partCount) || data.partCount < 1 || data.partCount > 16 || !Number.isSafeInteger(data.morphCount) || data.morphCount < 0 || data.morphCount > 2 || indices !== void 0 && (!(indices instanceof Uint16Array) || indices.length < 3 || indices.length % 3 || data.vertices.length / 11 > 65536 || indices.some((index) => index >= data.vertices.length / 11)) || indices === void 0 && data.vertices.length % 33 || !expressionIndices || typeof expressionIndices !== "object" || Array.isArray(expressionIndices)) throw new TypeError("Mesh geometry with complete triangles and 1..16 parts required");
+    const variantEntries = Object.entries(expressionIndices);
+    if (variantEntries.some(([name, variant]) => !name || !(variant instanceof Uint16Array) || variant.length % 3 || variant.some((index) => index >= data.vertices.length / 11))) throw new TypeError("Invalid expression index variants");
     if (data.vertices.some((n) => !Number.isFinite(n))) throw new TypeError("Mesh values must be finite");
     for (let i = 0; i < data.vertices.length; i++) {
       if (i % 11 >= 2 && i % 11 < 6 && (data.vertices[i] < 0 || data.vertices[i] > 1)) throw new RangeError("Mesh RGBA channels must be in [0,1]");
       if (i % 11 === 10 && (!Number.isSafeInteger(data.vertices[i]) || data.vertices[i] < 0 || data.vertices[i] >= data.partCount)) throw new RangeError("Mesh part index outside partCount");
-      if (i % 11 >= 6 + data.morphCount * 2 && i % 11 < 10 && data.vertices[i] !== 0) throw new RangeError("Mesh deltas exceed declared morphCount");
+      if (i % 11 >= 6 + data.morphCount * 2 && i % 11 < 10 && data.vertices[i] !== 0 && !nonScalingStroke) throw new RangeError("Mesh deltas exceed declared morphCount");
     }
-    const byteLength = data.vertices.byteLength + (indices?.byteLength ?? 0);
+    if (nonScalingStroke && data.morphCount) throw new TypeError("Non-scaling stroke meshes cannot use vertex morph targets");
+    const variantByteLength = variantEntries.reduce((total, [, variant]) => total + variant.byteLength, 0);
+    const byteLength = data.vertices.byteLength + (indices?.byteLength ?? 0) + variantByteLength;
     if (this.meshes.size >= this.maxMeshes || this.bytes + byteLength > this.maxMeshBytes) throw new RangeError("Retained mesh budget exceeded");
     const vertices = data.vertices.slice(), ownedIndices = indices?.slice(), buffer = this.device.createVertexBuffer({ capacityBytes: vertices.byteLength });
     let indexBuffer;
+    const ownedVariants = /* @__PURE__ */ new Map();
     try {
       this.device.uploadVertices(buffer, vertices);
       if (ownedIndices) {
         indexBuffer = this.device.createIndexBuffer({ capacityBytes: ownedIndices.byteLength });
         this.device.uploadIndices(indexBuffer, ownedIndices);
       }
+      for (const [name, source] of variantEntries) {
+        const variantIndices = source.slice();
+        const variantBuffer = variantIndices.length ? this.device.createIndexBuffer({ capacityBytes: variantIndices.byteLength }) : null;
+        const variant = { indices: variantIndices, indexBuffer: variantBuffer, count: variantIndices.length };
+        ownedVariants.set(name, variant);
+        if (variantBuffer) this.device.uploadIndices(variantBuffer, variantIndices);
+      }
     } catch (error) {
+      for (const variant of ownedVariants.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
       if (indexBuffer) this.device.deleteIndexBuffer(indexBuffer);
       this.device.deleteVertexBuffer(buffer);
       throw error;
@@ -1391,10 +1441,13 @@ var MeshRenderer = class {
       indexBuffer,
       vertices,
       indices: ownedIndices,
+      expressionIndices: ownedVariants,
       count: ownedIndices?.length ?? vertices.length / 11,
       byteLength,
       partCount: data.partCount,
-      morphCount: data.morphCount
+      morphCount: data.morphCount,
+      strideFloats: 11,
+      hasNonScalingStroke: nonScalingStroke
     });
     this.meshes.add(mesh);
     this.bytes += byteLength;
@@ -1405,8 +1458,10 @@ var MeshRenderer = class {
   deleteMesh(mesh) {
     if (!this.meshes.has(mesh)) return false;
     if (this.pending?.mesh === mesh) this.flush();
+    this.alphaRunCache.delete(mesh);
     this.device.deleteVertexBuffer(mesh.buffer);
     if (mesh.indexBuffer) this.device.deleteIndexBuffer(mesh.indexBuffer);
+    for (const variant of mesh.expressionIndices.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
     this.meshes.delete(mesh);
     this.bytes -= mesh.byteLength;
     return true;
@@ -1426,7 +1481,10 @@ var MeshRenderer = class {
       depth = 0,
       depthTest = false,
       depthWrite = false,
-      depthFunc = "lequal"
+      depthWriteAlphaThreshold = null,
+      depthFunc = "lequal",
+      indexVariant = null,
+      strokeViewport = null
     } = options;
     this._drawMeshInstances(mesh, {
       matrices: matrix,
@@ -1439,10 +1497,13 @@ var MeshRenderer = class {
       alpha,
       whiteFlash,
       clips,
+      indexVariant,
       depth,
       depthTest,
       depthWrite,
-      depthFunc
+      depthWriteAlphaThreshold,
+      depthFunc,
+      strokeViewport
     });
   }
   /** Internal ordered instance append used when one retained pose has several transforms. */
@@ -1463,19 +1524,38 @@ var MeshRenderer = class {
     depth = 0,
     depthTest = false,
     depthWrite = false,
-    depthFunc = "lequal"
+    depthWriteAlphaThreshold = null,
+    depthFunc = "lequal",
+    indexVariant = null,
+    strokeViewport = null
   } = {}) {
     this._ready();
     if (!this.meshes.has(mesh)) throw new TypeError("Mesh owned by this renderer required");
+    if (indexVariant !== null && (typeof indexVariant !== "string" || !mesh.expressionIndices.has(indexVariant))) throw new TypeError("Known mesh expression index variant required");
     if (!this.device.active) throw new Error("beginFrame required");
     if (!Number.isSafeInteger(count) || count < 1 || !matrices || matrices.length !== count * 6) throw new TypeError("Packed mesh instance matrices required");
     for (let i = 0; i < matrices.length; i++) if (!Number.isFinite(matrices[i])) throw new TypeError("Mesh matrix values must be finite");
     finiteArray2(projection, 9, "projection");
     finiteArray2(morph, 2, "morph");
     finiteArray2(color2, 4, "color");
+    let strokeSize = null, inverseStrokeProjection = null;
+    if (mesh.hasNonScalingStroke) {
+      if (strokeViewport === null) {
+        if (this.device.activeRenderTarget) throw new Error("A strokeViewport is required for non-scaling strokes rendered to a render target");
+        strokeSize = [this.device.canvas.clientWidth, this.device.canvas.clientHeight];
+      } else {
+        finiteArray2(strokeViewport, 2, "strokeViewport");
+        strokeSize = [strokeViewport[0], strokeViewport[1]];
+      }
+      if (strokeSize.some((value) => !Number.isFinite(value) || value <= 0)) throw new RangeError("Non-scaling strokes require a positive CSS-pixel viewport size");
+      inverseStrokeProjection = invertProjection(projection);
+    }
     if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || color2.some((n) => n < 0 || n > 1)) throw new RangeError("RGBA/alpha in [0,1] required");
     if (!Number.isFinite(depth) || depth < -1 || depth > 1) throw new RangeError("depth must be in [-1,1]");
     if (typeof depthTest !== "boolean" || typeof depthWrite !== "boolean") throw new TypeError("depthTest and depthWrite must be booleans");
+    if (depthWriteAlphaThreshold !== null && (!Number.isFinite(depthWriteAlphaThreshold) || depthWriteAlphaThreshold < 0 || depthWriteAlphaThreshold > 1)) {
+      throw new RangeError("depthWriteAlphaThreshold must be in [0,1]");
+    }
     if (!["never", "less", "equal", "lequal", "greater", "notequal", "gequal", "always"].includes(depthFunc)) throw new TypeError("Unsupported depthFunc");
     if (!Number.isSafeInteger(prefixCount) || prefixCount < 0 || prefixCount > count || !Number.isSafeInteger(forceColorPrefixCount) || forceColorPrefixCount < 0 || forceColorPrefixCount > count) throw new RangeError("Instance color prefix count is invalid");
     if (prefixCount && !prefixColor) throw new TypeError("A prefix color is required for colored mesh instances");
@@ -1484,19 +1564,133 @@ var MeshRenderer = class {
       if (prefixColor.some((n) => n < 0 || n > 1)) throw new RangeError("RGBA channels must be in [0,1]");
     }
     const clip = clipState(clips, this.maxPlanes), pending = this.pending;
+    const variant = indexVariant === null ? null : mesh.expressionIndices.get(indexVariant);
     packParts(parts, mesh.partCount, this.partScratch);
     for (let i = 0; i < mesh.partCount; i++) if (depth + this.partScratch[i * 12 + 11] < -1 || depth + this.partScratch[i * 12 + 11] > 1) throw new RangeError("combined mesh and part depth must be in [-1,1]");
-    const depthStateKey = `${Number(depthTest)}:${Number(depthWrite)}:${depthFunc}`;
-    if (pending && (pending.mesh !== mesh || pending.clip.key !== clip.key || pending.depthStateKey !== depthStateKey || projection.some((n, i) => Math.fround(n) !== pending.projection[i]) || mesh.partCount > 1 && pending.parts.some((n, i) => n !== this.partScratch[i]) || this.count === this.maxInstances)) this.flush();
+    const depthStateKey = Number(depthTest) + ":" + Number(depthWrite) + ":" + depthFunc;
+    const alphaDepthWrite = depthWrite && depthWriteAlphaThreshold !== null;
+    if (!alphaDepthWrite) {
+      if (pending && (pending.mesh !== mesh || pending.indexVariant !== indexVariant || pending.clip.key !== clip.key || pending.depthStateKey !== depthStateKey || projection.some((n, i) => Math.fround(n) !== pending.projection[i]) || mesh.partCount > 1 && pending.parts.some((n, i) => n !== this.partScratch[i]) || this.count === this.maxInstances)) this.flush();
+      if (variant?.count === 0) return;
+      const part2 = this.partScratch, singlePart2 = mesh.partCount === 1;
+      for (let i = 0; i < count; i++) {
+        if (this.count === this.maxInstances) this.flush();
+        if (!this.pending) this.pending = {
+          mesh,
+          projection: Float32Array.from(projection),
+          clip,
+          depthStateKey,
+          indexVariant,
+          strokeSize,
+          inverseStrokeProjection,
+          depthState: { test: depthTest, write: depthWrite, func: depthFunc },
+          parts: this.partScratch.slice(0, mesh.partCount > 1 ? mesh.partCount * 12 : 0)
+        };
+        const offset = i * 6;
+        let m0 = matrices[offset], m1 = matrices[offset + 1], m2 = matrices[offset + 2], m3 = matrices[offset + 3], m4 = matrices[offset + 4], m5 = matrices[offset + 5];
+        let weight0 = morph[0], weight1 = morph[1], instanceAlpha = alpha;
+        if (singlePart2) {
+          const a = m0, b = m1, c = m2, d = m3;
+          m0 = a * part2[0] + c * part2[4];
+          m1 = b * part2[0] + d * part2[4];
+          m2 = a * part2[1] + c * part2[5];
+          m3 = b * part2[1] + d * part2[5];
+          m4 = a * part2[2] + c * part2[6] + m4;
+          m5 = b * part2[2] + d * part2[6] + m5;
+          instanceAlpha *= part2[10];
+          weight0 += part2[8];
+          weight1 += part2[9];
+        }
+        const instanceColor = i < prefixCount ? prefixColor : color2;
+        const instanceForceColor = i < forceColorPrefixCount ? true : forceColor, at = this.count++ * 16, data = this.instances;
+        data[at] = m0;
+        data[at + 1] = m2;
+        data[at + 2] = m4;
+        data[at + 3] = instanceAlpha;
+        data[at + 4] = m1;
+        data[at + 5] = m3;
+        data[at + 6] = m5;
+        data[at + 7] = instanceForceColor ? 1 : 0;
+        data[at + 8] = instanceColor[0];
+        data[at + 9] = instanceColor[1];
+        data[at + 10] = instanceColor[2];
+        data[at + 11] = instanceColor[3];
+        const instanceDepth = depth + (singlePart2 ? part2[11] : 0);
+        data[at + 12] = weight0;
+        data[at + 13] = weight1;
+        data[at + 14] = whiteFlash ? 1 : 0;
+        data[at + 15] = instanceDepth;
+      }
+      return;
+    }
+    const sharedMismatch = (current) => current.mesh !== mesh || current.indexVariant !== indexVariant || current.clip.key !== clip.key || projection.some((n, i) => Math.fround(n) !== current.projection[i]) || strokeSize && strokeSize.some((n, i) => n !== current.strokeSize?.[i]) || mesh.partCount > 1 && current.parts.some((n, i) => n !== this.partScratch[i]);
+    if (this.pending && (sharedMismatch(this.pending) || this.pending.depthStateKey !== depthStateKey || this.count === this.maxInstances)) this.flush();
+    if (variant?.count === 0) return;
+    const indices = variant?.indices ?? mesh.indices;
+    const triangleCount = (variant?.count ?? mesh.count) / 3;
     const part = this.partScratch, singlePart = mesh.partCount === 1;
     for (let i = 0; i < count; i++) {
-      if (this.count === this.maxInstances) this.flush();
+      const instanceColor = i < prefixCount ? prefixColor : color2;
+      const instanceForceColor = i < forceColorPrefixCount ? true : forceColor;
+      const runs = this._collectAlphaDepthRuns(
+        mesh,
+        indices,
+        triangleCount,
+        depthWriteAlphaThreshold,
+        alpha * instanceColor[3],
+        instanceForceColor,
+        indexVariant
+      );
+      const totalVertices = triangleCount * 3;
+      const oneRun = runs.length === 3 && runs[0] === 0 && runs[1] === totalVertices;
+      if (!oneRun) {
+        this.flush();
+        const offset2 = i * 6;
+        let m02 = matrices[offset2], m12 = matrices[offset2 + 1], m22 = matrices[offset2 + 2], m32 = matrices[offset2 + 3], m42 = matrices[offset2 + 4], m52 = matrices[offset2 + 5];
+        let weight02 = morph[0], weight12 = morph[1], instanceAlpha2 = alpha;
+        if (singlePart) {
+          const a = m02, b = m12, c = m22, d = m32;
+          m02 = a * part[0] + c * part[4];
+          m12 = b * part[0] + d * part[4];
+          m22 = a * part[1] + c * part[5];
+          m32 = b * part[1] + d * part[5];
+          m42 = a * part[2] + c * part[6] + m42;
+          m52 = b * part[2] + d * part[6] + m52;
+          instanceAlpha2 *= part[10];
+          weight02 += part[8];
+          weight12 += part[9];
+        }
+        const at2 = 0, data2 = this.instances;
+        data2[at2] = m02;
+        data2[at2 + 1] = m22;
+        data2[at2 + 2] = m42;
+        data2[at2 + 3] = instanceAlpha2;
+        data2[at2 + 4] = m12;
+        data2[at2 + 5] = m32;
+        data2[at2 + 6] = m52;
+        data2[at2 + 7] = instanceForceColor ? 1 : 0;
+        data2[at2 + 8] = instanceColor[0];
+        data2[at2 + 9] = instanceColor[1];
+        data2[at2 + 10] = instanceColor[2];
+        data2[at2 + 11] = instanceColor[3];
+        data2[at2 + 12] = weight02;
+        data2[at2 + 13] = weight12;
+        data2[at2 + 14] = whiteFlash ? 1 : 0;
+        data2[at2 + 15] = depth + (singlePart ? part[11] : 0);
+        this._drawAlphaDepthRuns(mesh, variant, projection, clip, part, runs, depthTest, depthFunc, strokeSize, inverseStrokeProjection);
+        continue;
+      }
+      const write = runs[2], stateKey = Number(depthTest) + ":" + Number(write) + ":" + depthFunc;
+      if (this.pending && (this.pending.depthStateKey !== stateKey || this.count === this.maxInstances)) this.flush();
       if (!this.pending) this.pending = {
         mesh,
         projection: Float32Array.from(projection),
         clip,
-        depthStateKey,
-        depthState: { test: depthTest, write: depthWrite, func: depthFunc },
+        depthStateKey: stateKey,
+        indexVariant,
+        strokeSize,
+        inverseStrokeProjection,
+        depthState: { test: depthTest, write, func: depthFunc },
         parts: this.partScratch.slice(0, mesh.partCount > 1 ? mesh.partCount * 12 : 0)
       };
       const offset = i * 6;
@@ -1514,8 +1708,7 @@ var MeshRenderer = class {
         weight0 += part[8];
         weight1 += part[9];
       }
-      const instanceColor = i < prefixCount ? prefixColor : color2;
-      const instanceForceColor = i < forceColorPrefixCount ? true : forceColor, at = this.count++ * 16, data = this.instances;
+      const at = this.count++ * 16, data = this.instances;
       data[at] = m0;
       data[at + 1] = m2;
       data[at + 2] = m4;
@@ -1528,32 +1721,120 @@ var MeshRenderer = class {
       data[at + 9] = instanceColor[1];
       data[at + 10] = instanceColor[2];
       data[at + 11] = instanceColor[3];
-      const instanceDepth = depth + (singlePart ? part[11] : 0);
       data[at + 12] = weight0;
       data[at + 13] = weight1;
       data[at + 14] = whiteFlash ? 1 : 0;
-      data[at + 15] = instanceDepth;
+      data[at + 15] = depth + (singlePart ? part[11] : 0);
     }
   }
-  flush() {
-    if (!this.count) return;
-    this._ready();
-    const { mesh, projection, clip, parts, depthState } = this.pending;
+  _collectAlphaDepthRuns(mesh, indices, triangleCount, threshold, opacity, forceColor, indexVariant) {
+    let cache = this.alphaRunCache.get(mesh);
+    if (!cache) {
+      cache = /* @__PURE__ */ new Map();
+      this.alphaRunCache.set(mesh, cache);
+    }
+    const partOpacities = [];
+    for (let i = 0; i < mesh.partCount; i++) partOpacities.push(this.partScratch[i * 12 + 10]);
+    const key = JSON.stringify([indexVariant, threshold, opacity, forceColor, partOpacities]);
+    const cached = cache.get(key);
+    if (cached) {
+      cache.delete(key);
+      cache.set(key, cached);
+      this.metrics.alphaRunCacheHits++;
+      return cached;
+    }
+    this.metrics.alphaRunCacheMisses++;
+    const runs = this.alphaRunScratch;
+    runs.length = 0;
+    if (opacity < threshold) {
+      runs.push(0, triangleCount * 3, false);
+    } else {
+      let runStart = 0, runWrite = null;
+      for (let triangle = 0; triangle < triangleCount; triangle++) {
+        let write = true;
+        for (let corner = 0; corner < 3; corner++) {
+          const indexOffset = triangle * 3 + corner, vertexOffset = (indices ? indices[indexOffset] : indexOffset) * mesh.strideFloats;
+          const partIndex = mesh.vertices[vertexOffset + 10];
+          const vertexAlpha = forceColor ? 1 : mesh.vertices[vertexOffset + 5];
+          const effectiveAlpha = opacity * vertexAlpha * this.partScratch[partIndex * 12 + 10];
+          if (effectiveAlpha <= 0 || effectiveAlpha < threshold) {
+            write = false;
+            break;
+          }
+        }
+        if (runWrite === null) {
+          runStart = triangle;
+          runWrite = write;
+        } else if (write !== runWrite) {
+          runs.push(runStart * 3, (triangle - runStart) * 3, runWrite);
+          runStart = triangle;
+          runWrite = write;
+        }
+      }
+      if (runWrite !== null) runs.push(runStart * 3, (triangleCount - runStart) * 3, runWrite);
+    }
+    if (runs.length <= 64) {
+      const stableRuns = runs.slice();
+      if (cache.size >= 16) cache.delete(cache.keys().next().value);
+      cache.set(key, stableRuns);
+      return stableRuns;
+    }
+    this.alphaRunScratch = [];
+    return runs;
+  }
+  _drawAlphaDepthRuns(mesh, variant, projection, clip, parts, runs, depthTest, depthFunc, strokeSize, inverseStrokeProjection) {
     this.planes.fill(0);
     if (clip.values) this.planes.set(clip.values);
     const pipeline = this._pipeline(mesh, clip.count > 0), uniforms = { u_projection: projection };
     if (clip.count) Object.assign(uniforms, { "u_planes[0]": this.planes, u_planeCount: clip.count });
+    if (mesh.hasNonScalingStroke) Object.assign(uniforms, { u_strokeViewportSize: strokeSize, ...clip.count ? { u_inverseProjection: inverseStrokeProjection } : {} });
+    if (mesh.partCount > 1) uniforms["u_parts[0]"] = parts;
+    if (!this.instanced) {
+      for (let j = 0; j < 4; j++) uniforms[["i_row0", "i_row1", "i_color", "i_params"][j]] = this.instances.subarray(j * 4, j * 4 + 4);
+    } else {
+      const instance = this.instances.subarray(0, 16);
+      this.device.uploadVertices(this.instanceBuffer, instance);
+      this.metrics.instanceBytesUploaded += instance.byteLength;
+    }
+    const indexBuffer = variant?.indexBuffer ?? mesh.indexBuffer;
+    for (let run = 0; run < runs.length; run += 3) {
+      this.device.draw({
+        pipeline,
+        buffer: mesh.buffer,
+        indexBuffer,
+        first: runs[run],
+        count: runs[run + 1],
+        instanceBuffer: this.instanceBuffer,
+        instances: 1,
+        uniforms,
+        depth: { test: depthTest, write: runs[run + 2], func: depthFunc }
+      });
+      this.metrics.draws++;
+      this.metrics.partUniformBytesSubmitted += parts.byteLength;
+    }
+    this.metrics.instances++;
+  }
+  flush() {
+    if (!this.count) return;
+    this._ready();
+    const { mesh, projection, clip, parts, depthState, indexVariant, strokeSize, inverseStrokeProjection } = this.pending;
+    const variant = indexVariant === null ? null : mesh.expressionIndices.get(indexVariant);
+    this.planes.fill(0);
+    if (clip.values) this.planes.set(clip.values);
+    const pipeline = this._pipeline(mesh, clip.count > 0), uniforms = { u_projection: projection };
+    if (clip.count) Object.assign(uniforms, { "u_planes[0]": this.planes, u_planeCount: clip.count });
+    if (mesh.hasNonScalingStroke) Object.assign(uniforms, { u_strokeViewportSize: strokeSize, ...clip.count ? { u_inverseProjection: inverseStrokeProjection } : {} });
     if (mesh.partCount > 1) uniforms["u_parts[0]"] = parts;
     if (this.instanced) {
       this.device.uploadVertices(this.instanceBuffer, this.instances.subarray(0, this.count * 16));
-      this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: mesh.indexBuffer, count: mesh.count, instanceBuffer: this.instanceBuffer, instances: this.count, uniforms, depth: depthState });
+      this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: variant?.indexBuffer ?? mesh.indexBuffer, count: variant?.count ?? mesh.count, instanceBuffer: this.instanceBuffer, instances: this.count, uniforms, depth: depthState });
       this.metrics.instanceBytesUploaded += this.count * 64;
       this.metrics.draws++;
       this.metrics.partUniformBytesSubmitted += parts.byteLength;
     } else {
       for (let i = 0; i < this.count; i++) {
         for (let j = 0; j < 4; j++) uniforms[["i_row0", "i_row1", "i_color", "i_params"][j]] = this.instances.subarray(i * 16 + j * 4, i * 16 + j * 4 + 4);
-        this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: mesh.indexBuffer, count: mesh.count, uniforms, depth: depthState });
+        this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: variant?.indexBuffer ?? mesh.indexBuffer, count: variant?.count ?? mesh.count, uniforms, depth: depthState });
         this.metrics.draws++;
         this.metrics.partUniformBytesSubmitted += parts.byteLength;
       }
@@ -1583,9 +1864,12 @@ var MeshRenderer = class {
     for (const mesh of this.meshes) {
       this.device.deleteVertexBuffer(mesh.buffer);
       if (mesh.indexBuffer) this.device.deleteIndexBuffer(mesh.indexBuffer);
+      for (const variant of mesh.expressionIndices.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
     }
     this.meshes.clear();
     this.bytes = 0;
+    this.alphaRunCache = /* @__PURE__ */ new WeakMap();
+    this.alphaRunScratch.length = 0;
     if (this.instanceBuffer) this.device.deleteVertexBuffer(this.instanceBuffer);
     for (const pipeline of this.pipelines.values()) this.device.deletePipeline(pipeline);
     this.pipelines.clear();
@@ -2481,7 +2765,7 @@ var MeshBuilder = class _MeshBuilder {
   }
   /** Packs compatible authored geometries into one painter-ordered mesh without sorting. */
   static combine(geometries) {
-    if (!Array.isArray(geometries) || !geometries.length || geometries.some((geometry) => !Number.isSafeInteger(geometry?.partCount) || geometry.partCount < 1 || geometry.strideFloats !== 11 || !(geometry.vertices instanceof Float32Array) || geometry.vertices.length < 33 || geometry.vertices.length % 11 || geometry.indices !== void 0 && (!(geometry.indices instanceof Uint16Array) || geometry.indices.length < 3 || geometry.indices.length % 3 || geometry.vertices.length / 11 > 65536 || geometry.indices.some((index) => index >= geometry.vertices.length / 11)) || geometry.indices === void 0 && geometry.vertices.length % 33 || !Number.isSafeInteger(geometry.morphCount) || geometry.morphCount < 0 || geometry.morphCount > 2) || geometries.reduce((count, geometry) => count + geometry.partCount, 0) > 16) {
+    if (!Array.isArray(geometries) || !geometries.length || geometries.some((geometry) => !Number.isSafeInteger(geometry?.partCount) || geometry.partCount < 1 || geometry.strideFloats !== 11 || !(geometry.vertices instanceof Float32Array) || geometry.vertices.length < 33 || geometry.vertices.length % 11 || geometry.nonScalingStroke !== void 0 && typeof geometry.nonScalingStroke !== "boolean" || geometry.nonScalingStroke && geometry.morphCount !== 0 || geometry.indices !== void 0 && (!(geometry.indices instanceof Uint16Array) || geometry.indices.length < 3 || geometry.indices.length % 3 || geometry.vertices.length / 11 > 65536 || geometry.indices.some((index) => index >= geometry.vertices.length / 11)) || geometry.indices === void 0 && geometry.vertices.length % 33 || !Number.isSafeInteger(geometry.morphCount) || geometry.morphCount < 0 || geometry.morphCount > 2) || geometries.reduce((count, geometry) => count + geometry.partCount, 0) > 16) {
       throw new TypeError("MeshBuilder geometries must fit within 16 parts and use the 11-float schema");
     }
     const vertexCount = geometries.reduce((count, geometry) => count + geometry.vertices.length / 11, 0);
@@ -2494,6 +2778,8 @@ var MeshBuilder = class _MeshBuilder {
     const vertices = new Float32Array(vertexCount * 11), indices = new Uint16Array(indexCount);
     const partCount = geometries.reduce((count, geometry) => count + geometry.partCount, 0);
     const morphCount = Math.max(...geometries.map((geometry) => geometry.morphCount));
+    const nonScalingStroke = geometries.some((geometry) => geometry.nonScalingStroke === true);
+    if (nonScalingStroke && morphCount) throw new TypeError("Non-scaling strokes cannot be combined with vertex morph targets");
     let offset = 0;
     let partOffset = 0;
     let indexOffset = 0;
@@ -2511,9 +2797,536 @@ var MeshBuilder = class _MeshBuilder {
       offset += vertexLength;
       partOffset += geometry.partCount;
     }
-    return Object.freeze({ vertices, indices, count: indices.length, strideFloats: 11, partCount, morphCount });
+    return Object.freeze({ vertices, indices, count: indices.length, strideFloats: 11, partCount, morphCount, ...nonScalingStroke ? { nonScalingStroke: true } : {} });
   }
 };
+
+// modules/rendering/yarn-shader.js
+var STRIDE_FLOATS = 9;
+var STRIDE_BYTES = STRIDE_FLOATS * 4;
+var MAX_SURFACES = 512;
+var DEFAULT_LIMIT_BYTES = 32 * 1024 * 1024;
+var ATTRIBUTES2 = [
+  { name: "a_position", size: 2, offset: 0 },
+  { name: "a_color", size: 4, offset: 8 },
+  { name: "a_surface", size: 3, offset: 24 }
+];
+var IDENTITY4 = Object.freeze([1, 0, 0, 1, 0, 0]);
+var WHITE4 = Object.freeze([1, 1, 1, 1]);
+var VERTEX2 = `
+attribute vec2 a_position;
+attribute vec4 a_color;
+attribute vec3 a_surface;
+uniform mat3 u_projection;
+uniform mat3 u_transform;
+uniform float u_depth;
+varying vec2 v_position;
+varying vec2 v_world;
+varying vec4 v_color;
+varying vec3 v_surface;
+void main() {
+  vec3 world = u_transform * vec3(a_position, 1.0);
+  vec3 projected = u_projection * world;
+  gl_Position = vec4(projected.xy, u_depth * projected.z, projected.z);
+  v_position = a_position;
+  v_world = world.xy / world.z;
+  v_color = a_color;
+  v_surface = a_surface;
+}`;
+function fragment2(kind, maxClipPlanes) {
+  const clips = maxClipPlanes ? `
+uniform vec3 u_planes[${maxClipPlanes}];
+void clipWorld() {
+  for (int i = 0; i < ${maxClipPlanes}; i++) {
+    vec3 plane = u_planes[i];
+    if (dot(plane.xy, plane.xy) > 0.0000001 && dot(plane, vec3(v_world, 1.0)) < 0.0) discard;
+  }
+}` : "void clipWorld() {}";
+  const body = kind === "yarn" ? yarnFragmentBody : sketchFragmentBody;
+  return `precision mediump float;
+varying vec2 v_position; varying vec2 v_world; varying vec4 v_color; varying vec3 v_surface;
+uniform vec4 u_bounds; uniform vec4 u_effect0; uniform vec4 u_effect1; uniform vec4 u_effect2; uniform vec4 u_effect3;
+uniform vec4 u_tint; uniform float u_flash;
+${kind === "sketch" ? "uniform float u_timeMs;" : ""}
+${clips}
+float hashCell(vec2 cell, float salt) {
+  return fract(sin(dot(cell, vec2(127.1, 311.7)) + u_effect0.x * 74.7 + salt * 19.19) * 43758.5453);
+}
+float segmentDistance(vec2 p, vec2 a, vec2 b) {
+  vec2 delta = b - a;
+  float denom = max(dot(delta, delta), 0.000001);
+  float t = clamp(dot(p - a, delta) / denom, 0.0, 1.0);
+  return length(p - (a + delta * t));
+}
+vec2 cubicPoint(float t, vec2 a, vec2 b, vec2 c, vec2 d) {
+  float s = 1.0 - t;
+  return s*s*s*a + 3.0*s*s*t*b + 3.0*s*t*t*c + t*t*t*d;
+}
+float cubicDistance(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d) {
+  float result = 100000.0;
+  vec2 previous = a;
+  for (int i = 1; i <= 5; i++) {
+    vec2 next = cubicPoint(float(i) * 0.2, a, b, c, d);
+    result = min(result, segmentDistance(p, previous, next));
+    previous = next;
+  }
+  return result;
+}
+float lineMask(float distanceToLine, float width) {
+  float aa = max(width * 0.16, 0.025);
+  return 1.0 - smoothstep(max(0.0, width * 0.5 - aa), width * 0.5 + aa, distanceToLine);
+}
+vec3 tintTo(vec3 base, float amount) {
+  return amount < 0.0 ? mix(base, vec3(0.0), -amount) : mix(base, vec3(1.0), amount);
+}
+${body}
+void main() {
+  clipWorld();
+  float alpha = v_color.a * u_tint.a;
+  if (alpha <= 0.0001) discard;
+  vec3 base = mix(v_color.rgb * u_tint.rgb, vec3(1.0), clamp(u_flash, 0.0, 1.0));
+  vec3 rgb = base;
+  float effect = v_surface.x;
+  if (effect < 0.5) {
+    ${kind === "yarn" ? "rgb = shadeYarnFill(rgb);" : "rgb = shadeSketchFill(rgb);"}
+    gl_FragColor = vec4(rgb * alpha, alpha);
+    return;
+  }
+  ${kind === "yarn" ? "shadeYarnEdge(rgb, alpha);" : "shadeSketchEdge(rgb, alpha);"}
+}`;
+}
+var yarnFragmentBody = `
+vec3 shadeYarnFill(vec3 base) {
+  float stitchWidth = abs(u_effect0.y), stitchHeight = u_effect0.z;
+  if (u_effect0.w < 0.0 || stitchWidth <= 0.0 || stitchHeight <= 0.0) return base;
+  float cols = max(2.0, ceil(u_bounds.z / stitchWidth));
+  float rows = max(2.0, ceil(u_bounds.w / stitchHeight));
+  float sx = u_bounds.z / cols, sy = u_bounds.w / rows;
+  vec2 local = v_position;
+  if (u_effect3.z > 0.5) {
+    float rx = max(u_bounds.z * 0.5, 0.0001), ry = max(u_bounds.w * 0.5, 0.0001);
+    float nx = clamp((local.x - (u_bounds.x + rx)) / rx, -1.35, 1.35);
+    float ny = (local.y - (u_bounds.y + ry)) / ry;
+    local.x += (sin(nx * 1.1) / 0.89120736 - nx) * rx;
+    local.y += ry * 0.13 * nx * nx * (1.0 - ny * 0.24);
+  }
+  vec2 cell = (local - u_bounds.xy) / vec2(sx, sy);
+  vec2 index = floor(cell);
+  float jitterX = (hashCell(index, 71.0) - 0.5) * u_effect1.x;
+  float jitterY = (hashCell(index, 39.0) - 0.5) * u_effect1.x;
+  float scaleX = 1.0 + (hashCell(index, 57.0) - 0.5) * u_effect1.x;
+  float scaleY = 1.0 + (hashCell(index, 91.0) - 0.5) * u_effect1.x;
+  vec2 p = (fract(cell) - vec2(0.5 + jitterX, 0.5 + jitterY)) / vec2(scaleX, scaleY);
+  p *= vec2(sx, sy);
+  float stroke = min(sx, sy) * (abs(u_effect0.w) / stitchHeight);
+  float underDistance = cubicDistance(p-vec2(0.0,stroke*0.06), vec2(-0.48,-0.46)*vec2(sx,sy), vec2(-0.22,-0.57)*vec2(sx,sy), vec2(0.22,-0.57)*vec2(sx,sy), vec2(0.48,-0.46)*vec2(sx,sy));
+  vec2 leftA=vec2(-0.34,-0.36)*vec2(sx,sy), leftB=vec2(-0.32,-0.06)*vec2(sx,sy), leftC=vec2(-0.18,0.17)*vec2(sx,sy), leftD=vec2(-0.025,0.34)*vec2(sx,sy);
+  vec2 rightA=vec2(0.34,-0.36)*vec2(sx,sy), rightB=vec2(0.32,-0.06)*vec2(sx,sy), rightC=vec2(0.18,0.17)*vec2(sx,sy), rightD=vec2(0.025,0.34)*vec2(sx,sy);
+  float leftDistance = cubicDistance(p,leftA,leftB,leftC,leftD);
+  float rightDistance = cubicDistance(p,rightA,rightB,rightC,rightD);
+  float under = lineMask(underDistance, stroke*0.5) * 0.5;
+  float grooveLeft = cubicDistance(p-vec2(0.0,stroke*0.06),leftA,leftB,leftC,leftD);
+  float grooveRight = cubicDistance(p-vec2(0.0,stroke*0.06),rightA,rightB,rightC,rightD);
+  float groove = max(lineMask(grooveLeft,stroke*1.08),lineMask(grooveRight,stroke*1.08))*0.85;
+  float yarn = max(lineMask(leftDistance,stroke*0.89),lineMask(rightDistance,stroke*0.89));
+  float lightLeft = cubicDistance(p+vec2(stroke*0.14,stroke*0.13),leftA,leftB,leftC,leftD);
+  float lightRight = cubicDistance(p+vec2(stroke*0.14,stroke*0.13),rightA,rightB,rightC,rightD);
+  float light = max(lineMask(lightLeft,stroke*0.34),lineMask(lightRight,stroke*0.34))*0.57;
+  float twist = 0.0;
+  if (mod(index.x + index.y, 2.0) < 1.0) {
+    float a = segmentDistance(p,vec2(-0.32,-0.12)*vec2(sx,sy),vec2(-0.16,-0.13)*vec2(sx,sy));
+    float b = segmentDistance(p,vec2(0.22,0.18)*vec2(sx,sy),vec2(0.37,0.08)*vec2(sx,sy));
+    twist = max(lineMask(a,stroke*0.075),lineMask(b,stroke*0.075))*0.5;
+  }
+  vec3 dark = tintTo(base,-0.28), grooveColor = tintTo(base,-u_effect1.y);
+  vec3 yarnColor = tintTo(base,0.10), highlight = tintTo(base,0.38);
+  vec3 color = mix(base,dark,under);
+  color = mix(color,grooveColor,groove);
+  color = mix(color,yarnColor,yarn);
+  color = mix(color,highlight,max(light*0.57,twist));
+  return color;
+}
+void shadeYarnEdge(inout vec3 rgb, float alpha) {
+  float radial = v_surface.z;
+  float along = v_surface.y * u_effect3.y;
+  float edgeWidth = u_effect1.w;
+  float lobe = fract(along / max(u_effect1.z, 0.001));
+  float relief = min(u_effect3.w, edgeWidth * 0.75);
+  float wave = sin(lobe * 6.2831853) * relief * 0.35;
+  float seam = lineMask(abs(radial - wave),edgeWidth*0.56);
+  float seamDark = lineMask(abs(radial - wave - edgeWidth*0.06),edgeWidth*0.8)*0.7;
+  float seamLight = lineMask(abs(radial - wave + edgeWidth*0.09),edgeWidth*0.17)*0.55;
+  float spacing = max(u_effect2.x,0.001);
+  float fiberIndex = floor(along / spacing);
+  float jitter = hashCell(vec2(fiberIndex,0.0),22.0);
+  float start = spacing * (fiberIndex + 0.22 + jitter * 0.48);
+  float randomLength = 0.45 + hashCell(vec2(fiberIndex,0.0),5.0) * 0.95;
+  float lengthLimit = min(u_effect2.y,max(u_bounds.z,u_bounds.w)*0.12)*randomLength;
+  float lean = (hashCell(vec2(fiberIndex,0.0),14.0)-0.5)*lengthLimit*1.5;
+  float alongDistance = abs(along - start - lean * clamp(radial/max(lengthLimit,0.001),0.0,1.0));
+  float fiber = 0.0;
+  if (u_effect3.x > 0.0 && fiberIndex < u_effect3.x && radial >= 0.0 && radial <= lengthLimit) {
+    fiber = lineMask(alongDistance,u_effect2.z);
+  }
+  float coverage = max(max(seam,seamDark*0.6),max(seamLight,fiber*u_effect2.w));
+  if (coverage < 0.012) discard;
+  vec3 dark=tintTo(rgb,-0.28), yarn=tintTo(rgb,0.10), light=tintTo(rgb,0.38);
+  rgb=mix(rgb,dark,seamDark*0.7);
+  rgb=mix(rgb,yarn,seam);
+  rgb=mix(rgb,light,max(seamLight,fiber*0.7));
+  float outAlpha=alpha*coverage;
+  gl_FragColor=vec4(rgb*outAlpha,outAlpha);
+}`;
+var sketchFragmentBody = `
+vec3 shadeSketchFill(vec3 base) {
+  float angle=u_effect1.z, spacing=max(u_effect1.w,0.001);
+  vec2 direction=vec2(cos(angle),sin(angle));
+  float phase=dot(v_position,direction)/spacing + hashCell(vec2(u_effect0.x,0.0),31.0);
+  float distanceToHatch=abs(fract(phase)-0.5)*spacing;
+  float hatch=lineMask(distanceToHatch,u_effect2.x)*u_effect2.y;
+  return mix(base,tintTo(base,-0.48),hatch);
+}
+void shadeSketchEdge(inout vec3 rgb, float alpha) {
+  float phase=mod(u_timeMs,max(u_effect0.y,16.0))/max(u_effect0.y,16.0)*6.2831853;
+  float wobble=sin(v_surface.y*u_effect0.z*6.2831853+phase+u_effect0.x)*u_effect1.x;
+  float offset=(u_effect1.y+wobble);
+  float echo=lineMask(abs(v_surface.z-offset),u_effect1.z)*u_effect1.w;
+  if(echo<0.012)discard;
+  rgb=mix(rgb,tintTo(rgb,-0.52),echo);
+  float outAlpha=alpha*echo;
+  gl_FragColor=vec4(rgb*outAlpha,outAlpha);
+}`;
+function finiteArray3(value, count, name) {
+  if (!value || value.length !== count || Array.from(value).some((number) => !Number.isFinite(number))) throw new TypeError(`${name} needs ${count} finite numbers`);
+}
+function validateStyle(style) {
+  if (!style || typeof style !== "object" || Array.isArray(style)) throw new TypeError("A complete SVG-authored yarn or sketch style is required");
+  const yarnRequired = ["seed", "stitchWidth", "stitchHeight", "thickness", "irregularity", "contrast", "edgeSpacing", "edgeRelief", "edgeWidth", "fiberLength", "fiberWidth", "fiberOpacity", "fiberMax"];
+  const sketchRequired = ["seed", "periodMs", "amplitude", "frequency", "echoX", "echoY", "echoWidth", "echoOpacity", "hatchAngle", "hatchSpacing", "hatchWidth", "hatchOpacity"];
+  const fields = style.kind === "yarn" ? yarnRequired : style.kind === "sketch" ? sketchRequired : null;
+  if (!fields || fields.some((key) => !Number.isFinite(style[key]))) throw new TypeError("Unsupported or incomplete SVG surface style");
+  if (style.seed < 0 || style.seed > 2147483647 || !Number.isSafeInteger(style.seed)) throw new RangeError("Surface seed must be a nonnegative 31-bit integer");
+  if (style.kind === "yarn") {
+    for (const key of ["stitchWidth", "stitchHeight", "thickness", "edgeSpacing", "edgeRelief", "edgeWidth", "fiberLength", "fiberWidth"]) if (style[key] <= 0) throw new RangeError(`Yarn ${key} must be positive`);
+    for (const key of ["irregularity", "contrast", "fiberOpacity"]) if (style[key] < 0 || style[key] > 1) throw new RangeError(`Yarn ${key} must be in [0,1]`);
+    if (!Number.isSafeInteger(style.fiberMax) || style.fiberMax < 0 || style.fiberMax > 512) throw new RangeError("Yarn fiberMax must be an integer from 0 to 512");
+    for (const key of ["fiberSpacing", "curved", "pattern", "detail", "fiber"]) if (style[key] !== void 0 && (key === "fiberSpacing" ? !Number.isFinite(style[key]) || style[key] <= 0 : typeof style[key] !== "boolean")) throw new TypeError(`Invalid Yarn ${key}`);
+  } else {
+    if (!Number.isSafeInteger(style.periodMs) || style.periodMs < 16 || style.periodMs > 1e4) throw new RangeError("Sketch periodMs must be 16..10000");
+    for (const key of ["amplitude", "frequency", "echoWidth", "hatchSpacing", "hatchWidth"]) if (style[key] <= 0) throw new RangeError(`Sketch ${key} must be positive`);
+    for (const key of ["echoOpacity", "hatchOpacity"]) if (style[key] < 0 || style[key] > 1) throw new RangeError(`Sketch ${key} must be in [0,1]`);
+  }
+}
+function normalizeOutline(outline) {
+  if (!(outline instanceof Float32Array || Array.isArray(outline)) || outline.length < 8 || outline.length % 2) throw new TypeError("Closed SVG contour must contain at least four x/y points");
+  const points = [];
+  for (let i = 0; i < outline.length; i += 2) {
+    const x = outline[i], y = outline[i + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new TypeError("SVG contour points must be finite");
+    if (!points.length || Math.hypot(x - points.at(-1)[0], y - points.at(-1)[1]) > 1e-6) points.push([x, y]);
+  }
+  if (points.length > 4 && Math.hypot(points[0][0] - points.at(-1)[0], points[0][1] - points.at(-1)[1]) < 1e-6) points.pop();
+  if (points.length < 3) throw new TypeError("SVG contour requires at least three distinct points");
+  return points;
+}
+function surfaceGeometry(fillVertices, outline, edgeColors, style) {
+  if (!(fillVertices instanceof Float32Array) || fillVertices.length < 18 || fillVertices.length % 18) throw new TypeError("Filled surface requires complete triangles in a six-float position/color layout");
+  const points = normalizeOutline(outline);
+  if (edgeColors !== void 0 && (!(edgeColors instanceof Float32Array) || edgeColors.length !== points.length * 4)) throw new TypeError("edgeColors must contain one RGBA color per contour point");
+  if (edgeColors && edgeColors.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) throw new RangeError("edgeColors must contain finite RGBA values in [0,1]");
+  for (let i = 0; i < fillVertices.length; i++) {
+    if (!Number.isFinite(fillVertices[i])) throw new TypeError("Filled surface vertices must be finite");
+    const field = i % 6;
+    if (field >= 2 && (fillVertices[i] < 0 || fillVertices[i] > 1)) throw new RangeError("Surface colors must be in [0,1]");
+  }
+  const lengths = [], normals = [];
+  let total = 0, signedArea = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length], dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    if (!length) throw new TypeError("SVG contour cannot contain zero-length edges");
+    lengths.push(length);
+    total += length;
+    signedArea += a[0] * b[1] - b[0] * a[1];
+    normals.push([dy / length, -dx / length]);
+  }
+  if (Math.abs(signedArea) < 1e-6) throw new TypeError("SVG contour cannot have zero area");
+  const winding = signedArea >= 0 ? 1 : -1;
+  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < fillVertices.length; i += 6) {
+    bounds[0] = Math.min(bounds[0], fillVertices[i]);
+    bounds[1] = Math.min(bounds[1], fillVertices[i + 1]);
+    bounds[2] = Math.max(bounds[2], fillVertices[i]);
+    bounds[3] = Math.max(bounds[3], fillVertices[i + 1]);
+  }
+  if (!(bounds[2] > bounds[0] && bounds[3] > bounds[1])) throw new TypeError("Filled surface bounds must have positive area");
+  const rgba2 = edgeColors ? edgeColors : (() => {
+    const color2 = [0, 0, 0, 0];
+    for (let i = 0; i < fillVertices.length; i += 6) for (let c = 0; c < 4; c++) color2[c] += fillVertices[i + 2 + c];
+    for (let c = 0; c < 4; c++) color2[c] /= fillVertices.length / 6;
+    return Float32Array.from(points.flatMap(() => color2));
+  })();
+  const edgeWidth = style.kind === "yarn" ? style.edgeWidth : Math.max(style.echoWidth, Math.hypot(style.echoX, style.echoY) + style.amplitude + style.echoWidth);
+  const fiberLength = style.kind === "yarn" && style.fiber !== false ? style.fiberLength : edgeWidth;
+  const fillRecords = new Float32Array(fillVertices.length / 6 * STRIDE_FLOATS);
+  let write = 0;
+  for (let i = 0; i < fillVertices.length; i += 6) {
+    fillRecords.set(fillVertices.subarray(i, i + 6), write);
+    fillRecords[write + 6] = 0;
+    write += STRIDE_FLOATS;
+  }
+  const cumulative = [0];
+  for (const length of lengths) cumulative.push(cumulative.at(-1) + length);
+  const ring = [];
+  for (let i = 0; i < points.length; i++) {
+    const previous = normals[(i + points.length - 1) % points.length], current = normals[i];
+    let mx = (previous[0] + current[0]) * winding, my = (previous[1] + current[1]) * winding;
+    const miterLength = Math.hypot(mx, my);
+    if (miterLength < 1e-5) {
+      mx = current[0] * winding;
+      my = current[1] * winding;
+    } else {
+      mx /= miterLength;
+      my /= miterLength;
+    }
+    const denominator = Math.max(0.25, Math.abs(mx * current[0] * winding + my * current[1] * winding));
+    const scale = Math.min(4, 1 / denominator);
+    ring.push([mx * scale, my * scale]);
+  }
+  const edgeFirst = fillVertices.length / 6;
+  const edgeRecords = [];
+  const colorAt = (index) => rgba2.subarray(index * 4, index * 4 + 4);
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    const emit = (pointIndex, distance) => {
+      const point2 = points[pointIndex], normal = ring[pointIndex], x = point2[0] + normal[0] * distance, y = point2[1] + normal[1] * distance;
+      edgeRecords.push(x, y, ...colorAt(pointIndex), 1, cumulative[pointIndex] / total, distance);
+    };
+    emit(i, -edgeWidth);
+    emit(i, fiberLength);
+    emit(j, fiberLength);
+    emit(i, -edgeWidth);
+    emit(j, fiberLength);
+    emit(j, -edgeWidth);
+  }
+  const edgeRecordArray = Float32Array.from(edgeRecords);
+  const vertices = new Float32Array(fillRecords.length + edgeRecordArray.length);
+  vertices.set(fillRecords);
+  vertices.set(edgeRecordArray, fillRecords.length);
+  return Object.freeze({
+    vertices,
+    fillFirst: 0,
+    fillCount: fillVertices.length / 6,
+    edgeFirst: fillVertices.length / 6,
+    edgeCount: edgeRecordArray.length / STRIDE_FLOATS,
+    edgeByteOffset: fillRecords.length * 4,
+    bounds: Float32Array.of(bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]),
+    contourLength: total
+  });
+}
+function clipPlanes(clips, maxPlanes) {
+  const packed = new Float32Array(maxPlanes * 3);
+  if (!clips?.length) return packed;
+  if (!Array.isArray(clips)) throw new TypeError("clips must be an array of convex polygons");
+  let cursor = 0;
+  for (const polygon of clips) {
+    if (!Array.isArray(polygon) || polygon.length < 3 || polygon.some((point2) => !Number.isFinite(point2?.x) || !Number.isFinite(point2?.y))) throw new TypeError("Finite convex clip polygons required");
+    let area = 0;
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+      area += a.x * b.y - b.x * a.y;
+    }
+    if (Math.abs(area) < 1e-8) throw new RangeError("A clip polygon must have nonzero area");
+    const sign = area >= 0 ? 1 : -1;
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % polygon.length], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+      if (!length) continue;
+      if (cursor >= maxPlanes) throw new RangeError(`Shader surface clipping exceeds the device limit of ${maxPlanes} edge planes`);
+      const at = cursor++ * 3, nx = -dy / length * sign, ny = dx / length * sign;
+      packed[at] = nx;
+      packed[at + 1] = ny;
+      packed[at + 2] = -(nx * a.x + ny * a.y);
+    }
+  }
+  return packed;
+}
+function toMatrix3(matrix) {
+  finiteArray3(matrix, 6, "transform");
+  return Float32Array.of(matrix[0], matrix[1], 0, matrix[2], matrix[3], 0, matrix[4], matrix[5], 1);
+}
+var YarnSurfaceRenderer = class {
+  constructor(device, { maxSurfaces = MAX_SURFACES, maxSurfaceBytes = DEFAULT_LIMIT_BYTES } = {}) {
+    if (!device?.createPipeline || !device?.uploadVertices || !device?.draw) throw new TypeError("A ready GameKit WebGLDevice is required");
+    if (!Number.isSafeInteger(maxSurfaces) || maxSurfaces < 1 || maxSurfaces > MAX_SURFACES) throw new RangeError(`maxSurfaces must be 1..${MAX_SURFACES}`);
+    if (!Number.isSafeInteger(maxSurfaceBytes) || maxSurfaceBytes < STRIDE_BYTES * 3 || maxSurfaceBytes > device.maxBufferBytes) throw new RangeError("maxSurfaceBytes must fit the device buffer limit");
+    this.device = device;
+    this.maxSurfaces = maxSurfaces;
+    this.maxSurfaceBytes = maxSurfaceBytes;
+    this.maxClipPlanes = Math.max(1, Math.min(8, device.gl.getParameter(device.gl.MAX_FRAGMENT_UNIFORM_VECTORS) - 8));
+    this.surfaces = /* @__PURE__ */ new Set();
+    this.bytes = 0;
+    this.pipelines = /* @__PURE__ */ new Map();
+    this.state = "ready";
+    this.failure = null;
+    this.disposed = false;
+    this.onLost = () => {
+      this.state = "lost";
+    };
+    this.onRestored = () => {
+      try {
+        for (const surface of this.surfaces) device.uploadVertices(surface.buffer, surface.vertices);
+        this.state = "ready";
+        this.failure = null;
+      } catch (error) {
+        this.state = "failed";
+        this.failure = error.message;
+      }
+    };
+    device.canvas.addEventListener("webglcontextlost", this.onLost);
+    device.canvas.addEventListener("webglcontextrestored", this.onRestored);
+  }
+  _pipeline(kind) {
+    let pipeline = this.pipelines.get(kind);
+    if (pipeline) return pipeline;
+    const uniforms = {
+      u_projection: "matrix3fv",
+      u_transform: "matrix3fv",
+      u_depth: "1f",
+      u_bounds: "4f",
+      u_effect0: "4f",
+      u_effect1: "4f",
+      u_effect2: "4f",
+      u_effect3: "4f",
+      u_tint: "4f",
+      u_flash: "1f",
+      "u_planes[0]": "3fv",
+      ...kind === "sketch" ? { u_timeMs: "1f" } : {}
+    };
+    pipeline = this.device.createPipeline({
+      vertex: VERTEX2,
+      fragment: fragment2(kind, this.maxClipPlanes),
+      stride: STRIDE_BYTES,
+      attributes: ATTRIBUTES2,
+      uniforms
+    });
+    this.pipelines.set(kind, pipeline);
+    return pipeline;
+  }
+  createSurface({ fillVertices, outline, edgeColors, style }) {
+    if (this.disposed || this.state !== "ready") throw new Error(`YarnSurfaceRenderer is ${this.state}`);
+    validateStyle(style);
+    if (this.surfaces.size >= this.maxSurfaces) throw new RangeError("Retained yarn surface count limit exceeded");
+    const geometry = surfaceGeometry(fillVertices, outline, edgeColors, style);
+    const vertices = geometry.vertices.slice();
+    if (this.bytes + vertices.byteLength > this.maxSurfaceBytes) throw new RangeError("Retained yarn surface byte budget exceeded");
+    const pipeline = this._pipeline(style.kind);
+    const buffer = this.device.createVertexBuffer({ capacityBytes: vertices.byteLength });
+    try {
+      this.device.uploadVertices(buffer, vertices);
+    } catch (error) {
+      this.device.deleteVertexBuffer(buffer);
+      throw error;
+    }
+    const surface = Object.freeze({
+      renderer: this,
+      buffer,
+      vertices,
+      byteLength: vertices.byteLength,
+      style: Object.freeze({ ...style }),
+      kind: style.kind,
+      fillFirst: geometry.fillFirst,
+      fillCount: geometry.fillCount,
+      edgeFirst: geometry.edgeFirst,
+      edgeCount: geometry.edgeCount,
+      edgeByteOffset: geometry.edgeByteOffset,
+      bounds: geometry.bounds,
+      contourLength: geometry.contourLength,
+      pipeline
+    });
+    this.surfaces.add(surface);
+    this.bytes += surface.byteLength;
+    return surface;
+  }
+  drawSurface(surface, {
+    projection,
+    transform = IDENTITY4,
+    color: color2 = WHITE4,
+    alpha = 1,
+    whiteFlash = 0,
+    timeMs = 0,
+    clips = [],
+    z = 0,
+    depth = false,
+    blend = "source-over"
+  } = {}) {
+    if (this.disposed || this.state !== "ready") throw new Error(`YarnSurfaceRenderer is ${this.state}${this.failure ? ": " + this.failure : ""}`);
+    if (!this.surfaces.has(surface)) throw new TypeError("Surface must belong to this YarnSurfaceRenderer");
+    finiteArray3(projection, 9, "projection");
+    finiteArray3(color2, 4, "color");
+    if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || color2.some((value) => value < 0 || value > 1)) throw new RangeError("Surface tint/alpha must be in [0,1]");
+    if (!Number.isFinite(whiteFlash) || whiteFlash < 0 || whiteFlash > 1) throw new RangeError("whiteFlash must be in [0,1]");
+    if (!Number.isFinite(timeMs)) throw new TypeError("timeMs must be finite");
+    if (!Number.isFinite(z) || z < -1 || z > 1) throw new RangeError("z must be in [-1,1]");
+    const planes = clipPlanes(clips, this.maxClipPlanes), style = surface.style;
+    const yarn = surface.kind === "yarn";
+    const stitchPattern = style.pattern !== false;
+    const effect0 = yarn ? [style.seed, style.stitchWidth, style.stitchHeight, (stitchPattern ? 1 : -1) * style.thickness] : [style.seed, style.periodMs, style.frequency, 0];
+    const effect1 = yarn ? [style.irregularity, style.contrast, style.edgeSpacing, style.edgeWidth] : [style.amplitude, style.echoX, style.echoWidth, style.echoOpacity];
+    const effect2 = yarn ? [style.fiberSpacing ?? 4, style.fiberLength, style.fiberWidth, style.fiberOpacity] : [style.hatchWidth, style.hatchOpacity, style.hatchAngle, style.hatchSpacing];
+    const effect3 = yarn ? [
+      style.fiber === false ? 0 : style.fiberMax,
+      surface.contourLength,
+      style.curved === false ? 0 : 1,
+      style.edgeRelief * (style.detail ? 0.3 : 1)
+    ] : [0, style.echoY, 0, 0];
+    const uniforms = {
+      u_projection: projection,
+      u_transform: toMatrix3(transform),
+      u_depth: z,
+      u_bounds: surface.bounds,
+      u_effect0: effect0,
+      u_effect1: effect1,
+      u_effect2: effect2,
+      u_effect3: effect3,
+      u_tint: [color2[0], color2[1], color2[2], color2[3] * alpha],
+      u_flash: whiteFlash,
+      "u_planes[0]": planes,
+      ...yarn ? {} : { u_timeMs: (timeMs % style.periodMs + style.periodMs) % style.periodMs }
+    };
+    const common = { pipeline: surface.pipeline, buffer: surface.buffer, uniforms, blend, depth };
+    this.device.draw({ ...common, first: surface.fillFirst, count: surface.fillCount });
+    if (surface.edgeCount) {
+      const edgeDepth = depth === true ? { test: true, write: false } : depth && typeof depth === "object" ? { ...depth, write: false } : depth;
+      this.device.draw({ ...common, first: surface.edgeFirst, count: surface.edgeCount, depth: edgeDepth });
+    }
+  }
+  deleteSurface(surface) {
+    if (!this.surfaces.has(surface)) return false;
+    this.device.deleteVertexBuffer(surface.buffer);
+    this.surfaces.delete(surface);
+    this.bytes -= surface.byteLength;
+    return true;
+  }
+  stats() {
+    return Object.freeze({ state: this.state, surfaceCount: this.surfaces.size, retainedBytes: this.bytes, pipelineCount: this.pipelines.size, maxClipPlanes: this.maxClipPlanes });
+  }
+  dispose() {
+    if (this.disposed) return false;
+    this.device.canvas.removeEventListener("webglcontextlost", this.onLost);
+    this.device.canvas.removeEventListener("webglcontextrestored", this.onRestored);
+    for (const surface of this.surfaces) this.device.deleteVertexBuffer(surface.buffer);
+    for (const pipeline of this.pipelines.values()) this.device.deletePipeline(pipeline);
+    this.surfaces.clear();
+    this.pipelines.clear();
+    this.bytes = 0;
+    this.disposed = true;
+    this.state = "disposed";
+    return true;
+  }
+};
+function buildYarnSurfaceGeometry(options) {
+  validateStyle(options?.style);
+  return surfaceGeometry(options.fillVertices, options.outline, options.edgeColors, options.style);
+}
 
 // modules/rendering/glyph-atlas.js
 var GlyphAtlas = class {
@@ -3007,9 +3820,9 @@ var FontAssetLoader = class {
 };
 
 // modules/rendering/index.js
-var WHITE4 = Object.freeze([1, 1, 1, 1]);
+var WHITE5 = Object.freeze([1, 1, 1, 1]);
 var CLEAR = Object.freeze([0, 0, 0, 0]);
-var VERTEX2 = `
+var VERTEX3 = `
 attribute vec2 a_position;
 attribute vec2 a_uv;
 attribute vec4 a_color;
@@ -3124,19 +3937,19 @@ var Renderer2D = class {
   }
   _initialize() {
     const gl = this.gl;
-    let vertex, fragment2;
+    let vertex, fragment3;
     try {
-      vertex = compile2(gl, gl.VERTEX_SHADER, VERTEX2);
-      fragment2 = compile2(gl, gl.FRAGMENT_SHADER, FRAGMENT2);
+      vertex = compile2(gl, gl.VERTEX_SHADER, VERTEX3);
+      fragment3 = compile2(gl, gl.FRAGMENT_SHADER, FRAGMENT2);
       this.program = gl.createProgram();
       if (!this.program) throw new Error("WebGL program allocation failed");
       gl.attachShader(this.program, vertex);
-      gl.attachShader(this.program, fragment2);
+      gl.attachShader(this.program, fragment3);
       gl.linkProgram(this.program);
       if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(`WebGL link: ${gl.getProgramInfoLog(this.program)}`);
     } finally {
       if (vertex) gl.deleteShader(vertex);
-      if (fragment2) gl.deleteShader(fragment2);
+      if (fragment3) gl.deleteShader(fragment3);
     }
     this.buffer = gl.createBuffer();
     if (!this.buffer) throw new Error("WebGL buffer allocation failed");
@@ -3358,7 +4171,7 @@ var Renderer2D = class {
     data[i++] = tint[2];
     data[i] = tint[3];
   }
-  triangle(x0, y0, x1, y1, x2, y2, tint = WHITE4) {
+  triangle(x0, y0, x1, y1, x2, y2, tint = WHITE5) {
     finite4(x0, "x0");
     finite4(y0, "y0");
     finite4(x1, "x1");
@@ -3392,18 +4205,18 @@ var Renderer2D = class {
     this._vertex(dx, dy, u0, v1, tint);
   }
   /** Center-anchored rectangle, positive size, clockwise rotation in y-down world. */
-  rect(x, y, width, height, tint = WHITE4, angle = 0) {
+  rect(x, y, width, height, tint = WHITE5, angle = 0) {
     this._quad(this.white.texture, x, y, width, height, angle, tint, 0, 0, 1, 1);
   }
   /** Atlas UV edges are top-left based; reversing endpoints flips the image. */
-  sprite(texture, x, y, width = texture.width, height = texture.height, { angle = 0, tint = WHITE4, u0 = 0, v0 = 0, u1 = 1, v1 = 1 } = {}) {
+  sprite(texture, x, y, width = texture.width, height = texture.height, { angle = 0, tint = WHITE5, u0 = 0, v0 = 0, u1 = 1, v1 = 1 } = {}) {
     const record = this.textures.get(texture);
     if (!record) throw new Error("unknown/deleted texture");
     if (!Number.isFinite(u0) || !Number.isFinite(v0) || !Number.isFinite(u1) || !Number.isFinite(v1) || Math.min(u0, v0, u1, v1) < 0 || Math.max(u0, v0, u1, v1) > 1) throw new RangeError("UV must be in [0,1]");
     this._quad(record.texture, x, y, width, height, angle, tint, u0, v0, u1, v1);
   }
   /** Bounded fan tessellation; game chooses quality. No path/tessellation engine. */
-  ellipse(x, y, radiusX, radiusY, tint = WHITE4, segments = 24) {
+  ellipse(x, y, radiusX, radiusY, tint = WHITE5, segments = 24) {
     finite4(x, "x");
     finite4(y, "y");
     positive2(radiusX, "radiusX");
@@ -3418,7 +4231,7 @@ var Renderer2D = class {
       this._vertex(x + Math.cos(b) * radiusX, y + Math.sin(b) * radiusY, 0, 0, tint);
     }
   }
-  line(x0, y0, x1, y1, width, tint = WHITE4) {
+  line(x0, y0, x1, y1, width, tint = WHITE5) {
     finite4(x0, "x0");
     finite4(y0, "y0");
     finite4(x1, "x1");
@@ -3504,5 +4317,7 @@ export {
   Renderer2D,
   VectorContext,
   VectorRenderer,
-  WebGLDevice
+  WebGLDevice,
+  YarnSurfaceRenderer,
+  buildYarnSurfaceGeometry
 };

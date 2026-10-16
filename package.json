@@ -9,6 +9,7 @@
     "test:mobile-pages": "node tests/mobile-pages.e2e.cjs",
     "check": "node --experimental-vm-modules scripts/check.cjs",
     "vectors:compile": "node scripts/compile-vectors.mjs",
+    "test:yarn-assets": "node tests/yarn-assets.mjs",
     "test:elements": "node tests/element-natural.e2e.cjs",
     "test:chain-natural": "node tests/element-natural.e2e.cjs"
   },
