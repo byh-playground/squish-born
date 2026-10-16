@@ -16,7 +16,7 @@ async function main(){
   const response=await page.goto(url);const bytes=await response.body();result.htmlSha256=crypto.createHash('sha256').update(bytes).digest('hex');
   await page.waitForFunction(()=>!!window.BloomHatchery);
   const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());
-  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'e51471f340ea5e40ddbb70964510b8928696cf6c');assert.deepEqual(state.gamekit.modules,['rendering','vector-assets','input','simloop']);assert.equal(state.gamekit.running,true)}
+  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'733f87d3d81954e0a70598ca574a37a67b450fd7');assert.deepEqual(state.gamekit.modules,['rendering','vector-assets','input','simloop']);assert.equal(state.gamekit.running,true)}
   const field=await page.locator('#field').boundingBox();assert.ok(field?.height>0,mode+' field canvas must be visible');for(const name of ['field','hatch'])assert.ok(state.render.systems[name].mesh.retainedBytes<=32*1024*1024,name+' must remain inside GameKit 32 MiB retained-mesh budget');pass(mode+' boot',{version:state.build.version,frames:state.render.frames,fieldHeight:field.height,meshMiB:Object.fromEntries(['field','hatch'].map(name=>[name,+(state.render.systems[name].mesh.retainedBytes/1048576).toFixed(2)]))});
   await page.click('#practiceBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.state==='running');
   const cdp=touch?await context.newCDPSession(page):null;
