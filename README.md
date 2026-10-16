@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.14.3** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.15.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -29,11 +29,11 @@ npm run test:mobile-pages
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
 
-## 0.15.0 — SVG vector renderer
+## 0.15.1 — Browser-startup SVG compilation
 
-Squish keeps its existing visual style and moves its field, hatch, characters, nest, and kneading skin to authored SVG sources in `assets/svg/`. SVG metadata owns parts, pivots, sockets, expressions, and clips; `npm run vectors:compile` produces deterministic retained geometry in `assets/compiled/` with the pinned GameKit v0.6.2 runtime. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game. No PNG, canvas texture, or rasterized SVG artwork is used. Static source SVGs remain as SVG files for the collection UI.
+Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit 0.10.4 browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; the GameKit asset player draws the resulting geometry. No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game.
 
-The deploy now requires the `assets/` directory alongside `index.html`. Run `npm run check` to verify SDK and compiler hashes and ensure compiled geometry matches the authored SVGs. Browser gameplay, context-loss recovery, and 100/400-actor measurements still require a browser run; CPU submission time is not a GPU-time measurement.
+The deploy requires the original SVG directory and its manifest alongside `index.html`. Run `npm run check` to verify the SDK pin, source hashes, and startup-loader contract. CI runs the browser gameplay scenarios and captures the yarn-surface screenshots; local Chromium execution is not part of this migration.
 
 ## 0.14.3 · 화면 전환 시 손길 정리
 

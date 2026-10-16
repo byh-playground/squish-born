@@ -24,9 +24,86 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install official Playwright Chromium and media tools
+        run: npx playwright install --with-deps chromium
+      - name: Gameplay, desktop input, mobile touch, and visual captures
+        id: gameplay
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          SCREENSHOT_DIR: artifacts/ci/gameplay
+          TEST_REPORT: artifacts/ci/gameplay/verification.json
+        run: npm test
+      - name: Baseline gameplay and screenshots on deployed main
+        id: baseline
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          TEST_URL: https://byh-playground.github.io/squish-born/
+          BASELINE: '1'
+          SCREENSHOT_DIR: artifacts/ci/baseline
+          TEST_REPORT: artifacts/ci/baseline/verification.json
+        run: npm test
+      - name: Growth and progression journey
+        id: growth
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          SCREENSHOT_DIR: artifacts/ci/growth
+        run: npm run test:growth
+      - name: Mobile page layout at six viewport sizes
+        id: mobile
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          SCREENSHOT_DIR: artifacts/ci/mobile-pages
+        run: npm run test:mobile-pages
+      - name: Natural battle effects on desktop and mobile
+        id: effects
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          SCREENSHOT_DIR: artifacts/ci/elements
+        run: npm run test:elements
+      - name: Require all real browser scenarios to pass
+        if: always()
+        shell: bash
+        env:
+          GAMEPLAY: ${{ steps.gameplay.outcome }}
+          BASELINE: ${{ steps.baseline.outcome }}
+          GROWTH: ${{ steps.growth.outcome }}
+          MOBILE: ${{ steps.mobile.outcome }}
+          EFFECTS: ${{ steps.effects.outcome }}
+        run: |
+          failed=0
+          for scenario in "gameplay=$GAMEPLAY" "baseline=$BASELINE" "growth=$GROWTH" "mobile=$MOBILE" "effects=$EFFECTS"; do
+            if [[ "$scenario" != *=success ]]; then
+              echo "::error::Browser scenario did not pass: $scenario"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      - name: Upload browser reports, screenshots, and videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: squish-browser-evidence-${{ github.run_id }}
+          path: artifacts/ci/
+          if-no-files-found: warn
+          retention-days: 30
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: verify
+    needs: [verify, browser]
     runs-on: ubuntu-latest
     permissions:
       pages: write
