@@ -1,6 +1,7 @@
 const {chromium}=require(process.env.PLAYWRIGHT_PATH||'playwright');
 const fs=require('fs'),http=require('http'),path=require('path'),crypto=require('crypto'),assert=require('assert/strict');
 const createStaticServer=require('./static-server.cjs');
+const attachBrowserDiagnostics=require('./browser-diagnostics.cjs');
 const root=process.env.GAME_ROOT||path.resolve(__dirname,'..');
 const result={started:new Date().toISOString(),checks:[],errors:[],limitations:['Physical mobile devices and human audio listening not tested','Full five-wave balance and every material/trait combination not tested','No multiplayer mode exists']};
 const watchdog=setTimeout(()=>{console.error('180 second verification limit exceeded');process.exit(1)},180000);
@@ -12,11 +13,11 @@ async function main(){
  function pass(name,evidence){result.checks.push({name,status:'PASS',evidence});console.log('PASS',name)}
  for(const touch of [false,true]){
   const mode=touch?'touch':'mouse';const context=await browser.newContext({viewport:touch?{width:390,height:844}:{width:1365,height:900},isMobile:touch,hasTouch:touch,deviceScaleFactor:1});
-  const page=await context.newPage();page.on('pageerror',e=>result.errors.push(mode+': '+e.message));page.setDefaultTimeout(8000);
+  const page=await context.newPage();attachBrowserDiagnostics(page,result,mode);page.setDefaultTimeout(8000);
   const response=await page.goto(url);const bytes=await response.body();result.htmlSha256=crypto.createHash('sha256').update(bytes).digest('hex');
   await page.waitForFunction(()=>!!window.BloomHatchery);
   const inspect=()=>page.evaluate(()=>BloomHatchery.inspect());
-  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'e51471f340ea5e40ddbb70964510b8928696cf6c');assert.deepEqual(state.gamekit.modules,['rendering','vector-assets','input','simloop']);assert.equal(state.gamekit.running,true)}
+  let state=await inspect();result.version=state.build.version;result.build=state.build.id;result.gamekit=state.gamekit;if(state.gamekit){assert.equal(state.gamekit.dist,'e9af07d30125b5ffade5aff7b46d266f723eb5f7');assert.deepEqual(state.gamekit.modules,['rendering','vector-assets','input','simloop']);assert.equal(state.gamekit.running,true)}
   const field=await page.locator('#field').boundingBox();assert.ok(field?.height>0,mode+' field canvas must be visible');for(const name of ['field','hatch'])assert.ok(state.render.systems[name].mesh.retainedBytes<=32*1024*1024,name+' must remain inside GameKit 32 MiB retained-mesh budget');pass(mode+' boot',{version:state.build.version,frames:state.render.frames,fieldHeight:field.height,meshMiB:Object.fromEntries(['field','hatch'].map(name=>[name,+(state.render.systems[name].mesh.retainedBytes/1048576).toFixed(2)]))});
   await page.click('#practiceBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.state==='running');
   const cdp=touch?await context.newCDPSession(page):null;
@@ -41,10 +42,10 @@ async function main(){
   if(!touch){await restart();await hatch('good');await restart();await down();await page.waitForFunction(()=>BloomHatchery.inspect().simulation.stats.failures===1);await up();state=await inspect();assert.equal(state.simulation.stats.hatches,0);pass('mouse overpressure fails once');}
   await page.click('#soundBtn');if(await page.locator('[data-sound-pane=clips]').isVisible())await page.click('[data-sound-pane=clips]');await page.click('[data-sound="air_hiss"]');await page.waitForTimeout(70);result.audioPeak=Math.max(result.audioPeak||0,await page.evaluate(()=>BloomHatchery.sampleAudio()));state=await inspect();assert.equal(state.audio.loaded,20);assert.equal(state.audio.state,'running');assert.ok(state.audio.metrics.clips.air_hiss>0);assert.ok(state.audio.metrics.clips.air_puff>0);pass(mode+' real audio buffers and playback',{loaded:state.audio.loaded,clips:state.audio.metrics.clips,peak:result.audioPeak});
   await page.click('[data-close]');await page.click('#pauseBtn');const pause=await inspect();await page.waitForTimeout(400);assert.equal((await inspect()).simulation.time,pause.simulation.time);await page.click('#resumeBtn');await page.waitForTimeout(100);assert.ok((await inspect()).simulation.time>pause.simulation.time);pass(mode+' pause/resume without catch-up');
-  await page.reload();await page.waitForFunction(()=>!!window.BloomHatchery);state=await inspect();assert.equal(state.profile.records.hatches,0);assert.equal(state.profile.shells,0);pass(mode+' practice remains unsaved after reload');
+  await page.reload();await page.waitForFunction(()=>!!window.BloomHatchery);state=await inspect();assert.equal(state.profile.records.hatches,0);assert.equal(state.profile.shells,0);assert.deepEqual(state.errors,[],'No application render errors');pass(mode+' practice remains unsaved after reload');
   if(!touch){await page.click('#startBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.enemies>0,{},{timeout:15000});pass('defense wave runs with real simulation');}
   await context.close();
  }
- assert.ok(result.audioPeak>0,'Audio analyser must observe nonzero samples');assert.deepEqual(result.errors,[]);pass('no page errors');result.status='PASS';
+ assert.ok(result.audioPeak>0,'Audio analyser must observe nonzero samples');assert.deepEqual(result.errors,[]);assert.deepEqual(result.glErrors,[],'No WebGL errors');pass('no page or WebGL errors');result.status='PASS';
 }
 main().catch(e=>{result.status='FAIL';result.errors.push(e.stack);process.exitCode=1;console.error(e)}).finally(async()=>{clearTimeout(watchdog);result.elapsedSeconds=(Date.now()-Date.parse(result.started))/1000;fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});fs.writeFileSync(process.env.TEST_REPORT||path.join(root,'artifacts','verification.json'),JSON.stringify(result,null,2));await browser?.close();server?.close()});

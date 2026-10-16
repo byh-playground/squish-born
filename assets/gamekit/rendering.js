@@ -125,6 +125,11 @@ var WebGLDevice = class {
   _ready() {
     if (this.state !== "ready") throw new Error(`WebGLDevice is ${this.state}${this.failure ? `: ${this.failure}` : ""}`);
   }
+  get activeStencilAvailable() {
+    if (!this.stencilAvailable) return false;
+    if (!this.activeRenderTarget) return true;
+    return this.renderTargets.get(this.activeRenderTarget)?.stencil === true;
+  }
   _handle(map, handle, name) {
     const record = map.get(handle);
     if (!record) throw new Error(`Unknown/deleted ${name}`);
@@ -132,14 +137,14 @@ var WebGLDevice = class {
   }
   _pipeline(record) {
     const gl = this.gl;
-    let vertex, fragment2, program;
+    let vertex, fragment3, program;
     try {
       vertex = compile(gl, gl.VERTEX_SHADER, record.vertex);
-      fragment2 = compile(gl, gl.FRAGMENT_SHADER, record.fragment);
+      fragment3 = compile(gl, gl.FRAGMENT_SHADER, record.fragment);
       program = gl.createProgram();
       if (!program) throw new Error("Program allocation failed");
       gl.attachShader(program, vertex);
-      gl.attachShader(program, fragment2);
+      gl.attachShader(program, fragment3);
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`Program link failed: ${gl.getProgramInfoLog(program)}`);
       record.locations = record.attributes.map((attribute) => ({ ...attribute, location: gl.getAttribLocation(program, attribute.name) }));
@@ -151,13 +156,13 @@ var WebGLDevice = class {
       throw error;
     } finally {
       if (vertex) gl.deleteShader(vertex);
-      if (fragment2) gl.deleteShader(fragment2);
+      if (fragment3) gl.deleteShader(fragment3);
     }
   }
   /** Attributes use interleaved FLOAT components and byte offsets in their vertex/instance source. */
-  createPipeline({ vertex, fragment: fragment2, stride, instanceStride = 0, attributes, uniforms = {} }) {
+  createPipeline({ vertex, fragment: fragment3, stride, instanceStride = 0, attributes, uniforms = {} }) {
     this._ready();
-    if (typeof vertex !== "string" || typeof fragment2 !== "string") throw new TypeError("Shader sources required");
+    if (typeof vertex !== "string" || typeof fragment3 !== "string") throw new TypeError("Shader sources required");
     integer(stride, "stride", 4, 255);
     if (stride % 4) throw new RangeError("stride must align to FLOAT");
     integer(instanceStride, "instanceStride", 0, 255);
@@ -177,7 +182,7 @@ var WebGLDevice = class {
     }
     if (!uniforms || typeof uniforms !== "object") throw new TypeError("uniform descriptors required");
     for (const type of Object.values(uniforms)) if (!UNIFORMS.has(type)) throw new TypeError(`Unsupported uniform ${type}`);
-    const record = { vertex, fragment: fragment2, stride, instanceStride, instanced: attributes.some((a) => a.source === "instance"), attributes: attributes.map((a) => ({ ...a, source: a.source ?? "vertex" })), uniforms: { ...uniforms }, gpu: null };
+    const record = { vertex, fragment: fragment3, stride, instanceStride, instanced: attributes.some((a) => a.source === "instance"), attributes: attributes.map((a) => ({ ...a, source: a.source ?? "vertex" })), uniforms: { ...uniforms }, gpu: null };
     this._pipeline(record);
     const handle = Object.freeze({ stride, instanceStride });
     this.pipelines.set(handle, record);
@@ -341,28 +346,41 @@ var WebGLDevice = class {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, value);
   }
   _renderTarget(record) {
-    const gl = this.gl, previous = gl.getParameter(gl.FRAMEBUFFER_BINDING), framebuffer = gl.createFramebuffer();
+    const gl = this.gl, previous = gl.getParameter(gl.FRAMEBUFFER_BINDING), previousRenderbuffer = gl.getParameter(gl.RENDERBUFFER_BINDING), framebuffer = gl.createFramebuffer();
+    let stencilBuffer = null;
     if (!framebuffer) throw new Error("Render target framebuffer allocation failed");
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, record.gpu, 0);
+      if (record.stencil) {
+        stencilBuffer = gl.createRenderbuffer();
+        if (!stencilBuffer) throw new Error("Render target stencil allocation failed");
+        gl.bindRenderbuffer(gl.RENDERBUFFER, stencilBuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.STENCIL_INDEX8, record.width, record.height);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, stencilBuffer);
+      }
       const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
       if (status !== gl.FRAMEBUFFER_COMPLETE) throw new Error(`Render target framebuffer incomplete: ${status}`);
       record.framebuffer = framebuffer;
+      record.stencilBuffer = stencilBuffer;
     } catch (error) {
       gl.deleteFramebuffer(framebuffer);
+      if (stencilBuffer) gl.deleteRenderbuffer(stencilBuffer);
       throw error;
     } finally {
       gl.bindFramebuffer(gl.FRAMEBUFFER, previous);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, previousRenderbuffer);
     }
   }
   /** Creates a reusable, premultiplied RGBA texture/FBO pair; the handle is also a draw texture. */
-  createRenderTarget(width, height, { filter = "linear" } = {}) {
+  createRenderTarget(width, height, { filter = "linear", stencil = false } = {}) {
     this._ready();
     integer(width, "render target width", 1, this.maxTextureSize);
     integer(height, "render target height", 1, this.maxTextureSize);
     if (filter !== "nearest" && filter !== "linear") throw new TypeError("filter must be nearest or linear");
-    const record = { width, height, format: "rgba", premultiplied: true, source: null, filter, gpu: null, framebuffer: null };
+    if (typeof stencil !== "boolean") throw new TypeError("stencil must be boolean");
+    if (stencil && !this.stencilAvailable) throw new Error("Context has no stencil buffer");
+    const record = { width, height, format: "rgba", premultiplied: true, source: null, filter, stencil, gpu: null, framebuffer: null, stencilBuffer: null };
     this._texture(record);
     try {
       this._renderTarget(record);
@@ -371,12 +389,12 @@ var WebGLDevice = class {
       record.gpu = null;
       throw error;
     }
-    const handle = Object.freeze({ width, height });
+    const handle = Object.freeze({ width, height, stencil });
     this.textures.set(handle, record);
     this.renderTargets.set(handle, record);
     this.stats.textureCount = this.textures.size;
     this.stats.renderTargetCount = this.renderTargets.size;
-    this.stats.gpuRenderTargetBytes += width * height * 4;
+    this.stats.gpuRenderTargetBytes += width * height * (4 + (stencil ? 1 : 0));
     return handle;
   }
   /** Binds a target inside an active frame. Bindings may nest and must unwind in LIFO order. */
@@ -409,12 +427,13 @@ var WebGLDevice = class {
     if (!record) return false;
     if (this.renderTargetStack.some((entry) => entry.handle === handle) || this.activeRenderTarget === handle) throw new Error("Cannot delete a bound render target");
     this.gl.deleteFramebuffer(record.framebuffer);
+    if (record.stencilBuffer) this.gl.deleteRenderbuffer(record.stencilBuffer);
     this.gl.deleteTexture(record.gpu);
     this.renderTargets.delete(handle);
     this.textures.delete(handle);
     this.stats.textureCount = this.textures.size;
     this.stats.renderTargetCount = this.renderTargets.size;
-    this.stats.gpuRenderTargetBytes -= record.width * record.height * 4;
+    this.stats.gpuRenderTargetBytes -= record.width * record.height * (4 + (record.stencil ? 1 : 0));
     return true;
   }
   createTexture(source, { format = "rgba", premultiplied = false, filter = "linear" } = {}) {
@@ -602,7 +621,7 @@ var WebGLDevice = class {
     })();
     if (depthState && (typeof depthState.test !== "boolean" || typeof depthState.write !== "boolean")) throw new TypeError("depth.test and depth.write must be booleans");
     if ((depthState?.test || depthState?.write) && !this.depthAvailable) throw new Error("Context has no depth buffer");
-    if (stencil && !this.stencilAvailable) throw new Error("Context has no stencil buffer");
+    if (stencil && !this.activeStencilAvailable) throw new Error("The active framebuffer has no stencil attachment");
     if (blend !== false && !BLENDS.has(blend)) throw new TypeError("Unsupported blend");
     if (depthState && !FUNCTIONS[depthState.func]) throw new TypeError("Unsupported depth function");
     if (stencil) {
@@ -699,6 +718,7 @@ var WebGLDevice = class {
     gl.useProgram(null);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
     for (let i = 0; i < this.maxTextures; i++) {
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, null);
@@ -706,7 +726,10 @@ var WebGLDevice = class {
     gl.activeTexture(gl.TEXTURE0);
     for (const r of this.pipelines.values()) gl.deleteProgram(r.gpu);
     for (const r of this.buffers.values()) gl.deleteBuffer(r.gpu);
-    for (const r of this.renderTargets.values()) gl.deleteFramebuffer(r.framebuffer);
+    for (const r of this.renderTargets.values()) {
+      gl.deleteFramebuffer(r.framebuffer);
+      if (r.stencilBuffer) gl.deleteRenderbuffer(r.stencilBuffer);
+    }
     for (const r of this.textures.values()) gl.deleteTexture(r.gpu);
   }
   dispose() {
@@ -734,8 +757,19 @@ var WHITE = Object.freeze([1, 1, 1, 1]);
 var VERTEX = `attribute vec2 a_position; attribute vec2 a_uv; attribute vec4 a_color;
 uniform mat3 u_projection; varying vec2 v_uv; varying vec4 v_color;
 void main(){vec3 p=u_projection*vec3(a_position,1.0);gl_Position=vec4(p.xy,0.0,1.0);v_uv=a_uv;v_color=a_color;}`;
-var FRAGMENT = `precision mediump float; uniform sampler2D u_texture; uniform float u_textured; uniform float u_radial; uniform float u_whiteFlash;
-varying vec2 v_uv; varying vec4 v_color; void main(){vec2 uv=u_radial>0.5?vec2(clamp(length(v_uv),0.0,1.0),0.5):v_uv;vec4 t=mix(vec4(1.0),texture2D(u_texture,uv),u_textured);float a=t.a*v_color.a;vec3 rgb=mix(t.rgb*v_color.rgb*v_color.a,vec3(a),u_whiteFlash);gl_FragColor=vec4(rgb,a);}`;
+var CLIP_VERTEX = `attribute vec2 a_position;uniform mat3 u_projection;uniform mat3 u_transform;void main(){vec3 p=u_projection*u_transform*vec3(a_position,1.0);gl_Position=vec4(p.xy,0.0,1.0);}`;
+var CLIP_FRAGMENT = "precision mediump float;void main(){gl_FragColor=vec4(1.0);}";
+var FRAGMENT = `precision mediump float; uniform sampler2D u_texture; uniform float u_textured; uniform float u_radial; uniform vec4 u_radial_params; uniform float u_whiteFlash;
+varying vec2 v_uv; varying vec4 v_color;
+float radialParameter(vec2 q){
+  vec2 d=u_radial_params.xy;float r0=u_radial_params.z,dr=u_radial_params.w;
+  float a=dot(d,d)-dr*dr,b=-2.0*(dot(q,d)+r0*dr),c=dot(q,q)-r0*r0;
+  if(abs(a)<0.000001){if(abs(b)<0.000001)return -10000.0;float t=-c/b;return r0+dr*t>0.0?t:-10000.0;}
+  float discriminant=b*b-4.0*a*c;if(discriminant<0.0)return -10000.0;
+  float root=sqrt(max(discriminant,0.0)),t0=(-b-root)/(2.0*a),t1=(-b+root)/(2.0*a),chosen=-10000.0;
+  if(r0+dr*t0>0.0)chosen=t0;if(r0+dr*t1>0.0)chosen=max(chosen,t1);return chosen;
+}
+void main(){if(u_radial>1.5)discard;float t=u_radial>0.5?radialParameter(v_uv):0.0;if(u_radial>0.5&&t< -1000.0)discard;vec2 uv=u_radial>0.5?vec2(clamp(t,0.0,1.0),0.5):v_uv;vec4 texel=mix(vec4(1.0),texture2D(u_texture,uv),u_textured);float a=texel.a*v_color.a;vec3 rgb=mix(texel.rgb*v_color.rgb*v_color.a,vec3(a),u_whiteFlash);gl_FragColor=vec4(rgb,a);}`;
 var finite = (n, label) => {
   if (!Number.isFinite(n)) throw new TypeError(`${label} must be finite`);
 };
@@ -745,6 +779,9 @@ function rgba(value) {
 }
 function point(m, x, y) {
   return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+}
+function compose(a, b) {
+  return [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
 }
 function tessellate(contours, rule) {
   const edges = [], ys = [];
@@ -792,6 +829,50 @@ function xAt(edge, y) {
   const { a, b } = edge;
   return a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y);
 }
+function clipContour(points, rule) {
+  if (rule !== "nonzero" && rule !== "evenodd") throw new TypeError("clip rule must be nonzero or evenodd");
+  if (!(points instanceof Float32Array) && !(points instanceof Float64Array) && !Array.isArray(points)) throw new TypeError("Clip contour must be a flat numeric array of x/y pairs");
+  if (points.length % 2) throw new RangeError("Clip contour needs x/y pairs");
+  const flat = Float32Array.from(points);
+  if (flat.some((value) => !Number.isFinite(value))) throw new TypeError("Clip contour coordinates must be finite");
+  const count = flat.length / 2;
+  if (count > 256) throw new RangeError("Retained clip contours support at most 256 authored points");
+  let end = count;
+  if (count > 3 && flat[0] === flat[(count - 1) * 2] && flat[1] === flat[(count - 1) * 2 + 1]) end--;
+  if (end < 3) throw new RangeError("Clip contour requires at least three distinct points");
+  const contour = Array.from({ length: end }, (_, i) => ({ x: flat[i * 2], y: flat[i * 2 + 1] }));
+  for (let i = 0; i < end; i++) {
+    const a = contour[i], b = contour[(i + 1) % end];
+    if (a.x === b.x && a.y === b.y) throw new RangeError("Clip contour cannot contain consecutive duplicate points");
+  }
+  const orient = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x), on = (a, b, p) => Math.abs(orient(a, b, p)) < 1e-9 && p.x >= Math.min(a.x, b.x) - 1e-9 && p.x <= Math.max(a.x, b.x) + 1e-9 && p.y >= Math.min(a.y, b.y) - 1e-9 && p.y <= Math.max(a.y, b.y) + 1e-9;
+  for (let i = 0; i < end; i++) for (let j = i + 1; j < end; j++) {
+    if (j === i + 1 || i === 0 && j === end - 1) continue;
+    const a = contour[i], b = contour[(i + 1) % end], c = contour[j], d = contour[(j + 1) % end], o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+    if (o1 * o2 < 0 && o3 * o4 < 0 || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b)) throw new RangeError("Retained clip contours must be simple and non-self-intersecting");
+  }
+  let area = 0;
+  for (let i = 0; i < end; i++) {
+    const a = contour[i], b = contour[(i + 1) % end];
+    area += a.x * b.y - b.x * a.y;
+  }
+  if (Math.abs(area) < 1e-9) throw new RangeError("Clip contour area must be nonzero");
+  const triangles = tessellate([contour], rule);
+  if (!triangles.length) throw new RangeError("Clip contour could not be tessellated");
+  if (triangles.length / 3 > 16384) throw new RangeError("Retained clip tessellation exceeds 16384 triangles");
+  return { flat, triangles: Float32Array.from(triangles.flatMap((p) => [p.x, p.y])) };
+}
+function convexContour(contour) {
+  let sign = 0;
+  for (let i = 0; i < contour.length; i++) {
+    const a = contour[i], b = contour[(i + 1) % contour.length], c = contour[(i + 2) % contour.length], cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cross) < 1e-8) continue;
+    const next = Math.sign(cross);
+    if (sign && next !== sign) return false;
+    sign = next;
+  }
+  return sign !== 0;
+}
 var VectorRenderer = class {
   constructor(device, { initialVertices = 4096, maxVertices = 262144, glyphAtlas = null } = {}) {
     if (!device?.createPipeline || !device?.draw) throw new TypeError("A WebGLDevice is required");
@@ -802,8 +883,11 @@ var VectorRenderer = class {
     this.canvas = device.canvas;
     this.glyphAtlas = glyphAtlas;
     this.maxVertices = Math.min(maxVertices, Math.floor(device.maxBufferBytes / 32));
-    this.pipeline = device.createPipeline({ vertex: VERTEX, fragment: FRAGMENT, stride: 32, attributes: [{ name: "a_position", size: 2, offset: 0 }, { name: "a_uv", size: 2, offset: 8 }, { name: "a_color", size: 4, offset: 16 }], uniforms: { u_projection: "matrix3fv", u_texture: "1i", u_textured: "1f", u_radial: "1f", u_whiteFlash: "1f" } });
+    this.maxClipPlanes = Math.max(1, Math.min(32, device.gl.getParameter(device.gl.MAX_FRAGMENT_UNIFORM_VECTORS) - 2));
+    this.pipeline = device.createPipeline({ vertex: VERTEX, fragment: FRAGMENT, stride: 32, attributes: [{ name: "a_position", size: 2, offset: 0 }, { name: "a_uv", size: 2, offset: 8 }, { name: "a_color", size: 4, offset: 16 }], uniforms: { u_projection: "matrix3fv", u_texture: "1i", u_textured: "1f", u_radial: "1f", u_radial_params: "4f", u_whiteFlash: "1f" } });
+    this.clipPipeline = device.createPipeline({ vertex: CLIP_VERTEX, fragment: CLIP_FRAGMENT, stride: 8, attributes: [{ name: "a_position", size: 2, offset: 0 }], uniforms: { u_projection: "matrix3fv", u_transform: "matrix3fv" } });
     this.buffer = device.createVertexBuffer({ capacityBytes: initialVertices * 32 });
+    this.dynamicClipBuffer = device.createVertexBuffer({ capacityBytes: 0 });
     this.white = device.createTexture({ width: 1, height: 1, data: new Uint8Array([255, 255, 255, 255]) }, { format: "rgba", premultiplied: true, filter: "nearest" });
     this.vertices = new Float32Array(initialVertices * 8);
     this.count = 0;
@@ -818,11 +902,27 @@ var VectorRenderer = class {
     this.activeTexture = this.white;
     this.activeRadial = false;
     this.activeWhiteFlash = false;
+    this.activeGradient = null;
+    this.stencilClips = [];
+    this.clipPaths = /* @__PURE__ */ new Map();
+    this.clipPathBytes = 0;
+    this.stencilDepth = 0;
+    this.stencilNeedsRebuild = false;
     this.state = "ready";
     this.onLost = () => {
       this.count = 0;
+      this.stencilNeedsRebuild = this.stencilClips.length > 0;
+    };
+    this.onRestored = () => {
+      if (this.state === "disposed") return;
+      try {
+        for (const record of this.clipPaths.values()) this.device.uploadVertices(record.buffer, record.triangles);
+      } catch {
+        this.state = "failed";
+      }
     };
     this.canvas.addEventListener("webglcontextlost", this.onLost);
+    this.canvas.addEventListener("webglcontextrestored", this.onRestored);
     this.projection = new Float32Array([2 / this.canvas.width, 0, 0, 0, -2 / this.canvas.height, 0, -1, 1, 1]);
   }
   _frame() {
@@ -831,6 +931,10 @@ var VectorRenderer = class {
     const g = [...this.groups].reverse().find((group) => !group.direct);
     if (g) this._setProjection(g.bounds, g.target);
     else this._setProjection(null);
+    if (this.stencilNeedsRebuild) {
+      this._rebuildStencil();
+      this.stencilNeedsRebuild = false;
+    }
   }
   _setProjection(bounds, target = null) {
     const w = target?.width ?? this.canvas.width, h = target?.height ?? this.canvas.height, x = bounds?.x ?? 0, y = bounds?.y ?? 0;
@@ -900,14 +1004,19 @@ var VectorRenderer = class {
   }
   save() {
     this._frame();
-    this.stack.push({ matrix: this.matrix.slice(), clips: this.clips.map((polygon) => polygon.map((p) => ({ ...p }))) });
+    this.stack.push({ matrix: this.matrix.slice(), clips: this.clips.map((polygon) => polygon.map((p) => ({ ...p }))), stencilClips: this.stencilClips.slice() });
   }
   restore() {
     this._frame();
     const s = this.stack.pop();
     if (!s) throw new Error("restore without save");
+    this._submit();
     this.matrix = s.matrix;
     this.clips = s.clips;
+    if (s.stencilClips.length !== this.stencilClips.length || s.stencilClips.some((clip, i) => clip !== this.stencilClips[i])) {
+      this.stencilClips = s.stencilClips;
+      this._rebuildStencil();
+    }
   }
   setTransform(a, b, c, d, e, f) {
     this._frame();
@@ -930,15 +1039,128 @@ var VectorRenderer = class {
   clipRect(x, y, width, height) {
     this._frame();
     if (width < 0 || height < 0) throw new RangeError("clip size must be non-negative");
-    this.clips.push([point(this.matrix, x, y), point(this.matrix, x + width, y), point(this.matrix, x + width, y + height), point(this.matrix, x, y + height)]);
+    const contour = [point(this.matrix, x, y), point(this.matrix, x + width, y), point(this.matrix, x + width, y + height), point(this.matrix, x, y + height)];
+    if (width === 0 || height === 0) this.clips.push(contour);
+    else this._addConvexClip(contour);
   }
   /** Add the current transformed path contours to the clip stack. */
+  _addConvexClip(contour) {
+    if (contour.length > 1024) throw new RangeError("Dynamic convex clips support at most 1024 authored points");
+    if (!convexContour(contour)) throw new RangeError("clip() accepts convex contours; create a retained ClipPath for concave contours");
+    const area = contour.reduce((sum, p, i) => sum + p.x * contour[(i + 1) % contour.length].y - contour[(i + 1) % contour.length].x * p.y, 0);
+    if (Math.abs(area) < 1e-9) {
+      this.clips.push(contour);
+      return;
+    }
+    const planeCount = this.clips.reduce((sum, polygon) => sum + polygon.length, 0);
+    if (planeCount + contour.length > this.maxClipPlanes) {
+      this._pushDynamicStencilClip(contour);
+      return;
+    }
+    this.clips.push(contour);
+  }
+  _pushDynamicStencilClip(contour) {
+    if (!this.device.activeStencilAvailable) throw new Error("Clip contours exceeding the mesh edge-plane limit require stencil; no fallback is available");
+    if (this.stencilClips.length >= 255) throw new RangeError("At most 255 nested stencil clips are supported");
+    const triangles = new Float32Array((contour.length - 2) * 6);
+    let at = 0;
+    for (let i = 1; i + 1 < contour.length; i++) for (const p of [contour[0], contour[i], contour[i + 1]]) {
+      triangles[at++] = p.x;
+      triangles[at++] = p.y;
+    }
+    this._submit();
+    if (!this.stencilDepth) this.device.clear({ stencil: 0 });
+    const entry = { dynamic: true, triangles };
+    this._drawStencilClip(entry, this.stencilDepth);
+    this.stencilClips = [...this.stencilClips, entry];
+    this.stencilDepth++;
+  }
   clip(rule = "nonzero") {
     this._frame();
     if (rule !== "nonzero" && rule !== "evenodd") throw new TypeError("rule must be nonzero or evenodd");
     const contours = this.path.filter((path) => path.length >= 3).map((path) => path.map((p) => ({ ...p })));
     if (!contours.length) return;
-    this.clips.push(...contours);
+    if (contours.length !== 1) throw new RangeError("clip() accepts one contour; use a retained ClipPath for multi-contour geometry");
+    const contour = contours[0];
+    if (contour.length > 3 && contour[0].x === contour.at(-1).x && contour[0].y === contour.at(-1).y) contour.pop();
+    this._addConvexClip(contour);
+  }
+  createClipPath(points, { rule = "nonzero" } = {}) {
+    if (this.state !== "ready" || this.device.state !== "ready") throw new Error("VectorRenderer is not ready");
+    if (this.device.active) throw new Error("Create retained ClipPaths outside an active frame");
+    if (this.clipPaths.size >= 64) throw new RangeError("At most 64 retained ClipPaths may be live");
+    const geometry = clipContour(points, rule);
+    if (this.clipPathBytes + geometry.triangles.byteLength > 16 * 1024 * 1024) throw new RangeError("Retained ClipPaths exceed the 16 MiB budget");
+    const buffer = this.device.createVertexBuffer({ capacityBytes: geometry.triangles.byteLength });
+    try {
+      this.device.uploadVertices(buffer, geometry.triangles);
+    } catch (error) {
+      this.device.deleteVertexBuffer(buffer);
+      throw error;
+    }
+    const handle = Object.freeze({ renderer: this, buffer });
+    this.clipPaths.set(handle, { buffer, triangles: geometry.triangles, count: geometry.triangles.length / 2, byteLength: geometry.triangles.byteLength, contour: geometry.flat, rule });
+    this.clipPathBytes += geometry.triangles.byteLength;
+    return handle;
+  }
+  deleteClipPath(handle) {
+    const record = this.clipPaths.get(handle);
+    if (!record) return false;
+    const referenced = this.stencilClips.some((entry) => entry.handle === handle) || this.stack.some((state) => state.stencilClips.some((entry) => entry.handle === handle)) || this.groups.some((group) => group.stencilClips?.some((entry) => entry.handle === handle));
+    if (referenced) throw new Error("Remove a ClipPath from every saved clip stack before deleting it");
+    this.device.deleteVertexBuffer(record.buffer);
+    this.clipPaths.delete(handle);
+    this.clipPathBytes -= record.byteLength;
+    return true;
+  }
+  clipPath(handle, { transform = null } = {}) {
+    this._frame();
+    const record = this.clipPaths.get(handle);
+    if (!record) throw new TypeError("ClipPath owned by this VectorRenderer is required");
+    if (!this.device.activeStencilAvailable) throw new Error("Concave ClipPath requires an active stencil attachment; no fallback is available");
+    if (this.stencilClips.length >= 255) throw new RangeError("At most 255 nested stencil ClipPaths are supported");
+    const local = transform ?? IDENTITY;
+    if (local.length !== 6 || Array.from(local).some((value) => !Number.isFinite(value))) throw new TypeError("ClipPath transform needs six finite values");
+    const matrix = compose(this.matrix, local);
+    if (Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2]) < 1e-12) throw new RangeError("ClipPath transform must be invertible");
+    this._submit();
+    if (!this.stencilDepth) this.device.clear({ stencil: 0 });
+    const entry = { handle, matrix: Float32Array.from(matrix) };
+    this._drawStencilClip(entry, this.stencilDepth);
+    this.stencilClips = [...this.stencilClips, entry];
+    this.stencilDepth++;
+  }
+  _drawStencilClip(entry, ref) {
+    let buffer, count, transform;
+    if (entry.dynamic) {
+      buffer = this.dynamicClipBuffer;
+      this.device.uploadVertices(buffer, entry.triangles);
+      count = entry.triangles.length / 2;
+      transform = Float32Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    } else {
+      const record = this.clipPaths.get(entry.handle);
+      if (!record) throw new Error("A ClipPath in the active stack was deleted");
+      buffer = record.buffer;
+      count = record.count;
+      const m = entry.matrix;
+      transform = Float32Array.from([m[0], m[1], 0, m[2], m[3], 0, m[4], m[5], 1]);
+    }
+    this.device.draw({ pipeline: this.clipPipeline, buffer, count, uniforms: { u_projection: this.projection, u_transform: transform }, blend: false, colorMask: [false, false, false, false], stencil: { func: "equal", ref, mask: 255, writeMask: 255, pass: "increment" } });
+  }
+  _rebuildStencil() {
+    if (!this.stencilClips.length) {
+      this.stencilDepth = 0;
+      this.stencilNeedsRebuild = false;
+      return;
+    }
+    if (!this.device.activeStencilAvailable) throw new Error("Saved concave ClipPath requires a stencil attachment");
+    this.device.clear({ stencil: 0 });
+    this.stencilDepth = 0;
+    for (const entry of this.stencilClips) {
+      this._drawStencilClip(entry, this.stencilDepth);
+      this.stencilDepth++;
+    }
+    this.stencilNeedsRebuild = false;
   }
   _clipTriangle(a, b, c, uv) {
     let poly = [a, b, c].map((p, i) => uv ? { ...p, u: uv[i][0], v: uv[i][1] } : p);
@@ -971,6 +1193,7 @@ var VectorRenderer = class {
   }
   _emitTriangle(a, b, c, color2, uv = null) {
     rgba(color2);
+    if (this.activeGradient && !uv) uv = [this._gradientUV(a), this._gradientUV(b), this._gradientUV(c)];
     if (!this.clips.length && !uv) {
       if (this.count + 3 > this.maxVertices) this._submit();
       if (this.count + 3 > this.vertices.length / 8) {
@@ -1010,16 +1233,17 @@ var VectorRenderer = class {
   }
   _submit() {
     if (!this.count) return;
-    const texture = this.activeTexture ?? this.white;
+    const texture = this.activeTexture ?? this.white, gradient = this.activeGradient;
     this.device.uploadVertices(this.buffer, this.vertices.subarray(0, this.count * 8));
-    this.device.draw({ pipeline: this.pipeline, buffer: this.buffer, count: this.count, uniforms: { u_projection: this.projection, u_texture: 0, u_textured: texture === this.white ? 0 : 1, u_radial: this.activeRadial ? 1 : 0, u_whiteFlash: this.activeWhiteFlash ? 1 : 0 }, textures: [texture], blend: "source-over" });
+    this.device.draw({ pipeline: this.pipeline, buffer: this.buffer, count: this.count, uniforms: { u_projection: this.projection, u_texture: 0, u_textured: texture === this.white ? 0 : 1, u_radial: this.activeRadial ? gradient?.radialEmpty ? 2 : 1 : 0, u_radial_params: gradient?.radialParams ?? [0, 0, 0, 0], u_whiteFlash: this.activeWhiteFlash ? 1 : 0 }, textures: [texture], blend: "source-over", stencil: this.stencilDepth ? { func: "equal", ref: this.stencilDepth, mask: 255, writeMask: 0, pass: "keep" } : false });
     this.count = 0;
   }
-  _useTexture(texture, { radial = false, whiteFlash = false } = {}) {
-    if (this.activeTexture !== texture || this.activeRadial !== radial || this.activeWhiteFlash !== whiteFlash) this._submit();
+  _useTexture(texture, { radial = false, whiteFlash = false, gradient = null } = {}) {
+    if (this.activeTexture !== texture || this.activeRadial !== radial || this.activeWhiteFlash !== whiteFlash || this.activeGradient?.gradient !== gradient?.gradient) this._submit();
     this.activeTexture = texture;
     this.activeRadial = radial;
     this.activeWhiteFlash = whiteFlash;
+    this.activeGradient = gradient;
   }
   fill(colorValue = [0, 0, 0, 1], rule = "nonzero") {
     this._frame();
@@ -1028,22 +1252,29 @@ var VectorRenderer = class {
     const col = rgba(colorValue), vertices = tessellate(this.path, rule);
     for (let i = 0; i + 2 < vertices.length; i += 3) this._emitTriangle(vertices[i], vertices[i + 1], vertices[i + 2], col);
   }
-  fillRadialGradient({ texture, centerX, centerY, radius, matrixInverse, color: color2 = [1, 1, 1, 1], whiteFlash = false, rule = "nonzero" } = {}) {
+  fillRadialGradient(gradient) {
     this._frame();
-    if (!texture || !Number.isFinite(radius) || radius < 0 || !matrixInverse) throw new TypeError("valid radial gradient texture and transform are required");
-    this._useTexture(texture, { radial: true, whiteFlash });
-    const vertices = tessellate(this.path, rule), uv = (p) => {
-      const m = matrixInverse, x = m[0] * p.x + m[2] * p.y + m[4], y = m[1] * p.x + m[3] * p.y + m[5], r = Math.max(1e-8, radius);
-      return [(x - centerX) / r, (y - centerY) / r];
-    };
-    for (let i = 0; i + 2 < vertices.length; i += 3) {
-      const a = vertices[i], b = vertices[i + 1], c = vertices[i + 2];
-      this._emitTriangle(a, b, c, color2, [uv(a), uv(b), uv(c)]);
-    }
+    if (!gradient?.texture || !gradient.matrixInverse || !Number.isFinite(gradient.radialScale) || gradient.radialScale <= 0 || !Array.isArray(gradient.radialParams) || gradient.radialParams.length !== 4 || gradient.radialParams.some((value) => !Number.isFinite(value))) throw new TypeError("valid two-circle radial gradient texture and transform are required");
+    this._useTexture(gradient.texture, { radial: true, whiteFlash: gradient.whiteFlash, gradient });
+    const vertices = tessellate(this.path, gradient.rule ?? "nonzero");
+    for (let i = 0; i + 2 < vertices.length; i += 3) this._emitTriangle(vertices[i], vertices[i + 1], vertices[i + 2], gradient.color);
   }
-  stroke(colorValue = [0, 0, 0, 1], width = 1, { lineCap = "butt", lineJoin = "miter", miterLimit = 10 } = {}) {
+  fillLinearGradient(gradient) {
     this._frame();
-    this._useTexture(this.white);
+    if (!gradient?.texture || !gradient.matrixInverse || ![gradient.x0, gradient.y0, gradient.x1, gradient.y1].every(Number.isFinite)) throw new TypeError("valid linear gradient texture and transform are required");
+    this._useTexture(gradient.texture, { whiteFlash: gradient.whiteFlash, gradient });
+    const vertices = tessellate(this.path, gradient.rule ?? "nonzero");
+    for (let i = 0; i + 2 < vertices.length; i += 3) this._emitTriangle(vertices[i], vertices[i + 1], vertices[i + 2], gradient.color);
+  }
+  _gradientUV(p) {
+    const g = this.activeGradient, m = g.matrixInverse, x = m[0] * p.x + m[2] * p.y + m[4], y = m[1] * p.x + m[3] * p.y + m[5];
+    if (this.activeRadial) return [(x - g.x0) / g.radialScale, (y - g.y0) / g.radialScale];
+    const dx = g.x1 - g.x0, dy = g.y1 - g.y0, denom = dx * dx + dy * dy;
+    return [denom ? ((x - g.x0) * dx + (y - g.y0) * dy) / denom : 1, 0.5];
+  }
+  stroke(colorValue = [0, 0, 0, 1], width = 1, { lineCap = "butt", lineJoin = "miter", miterLimit = 10 } = {}, gradient = null) {
+    this._frame();
+    this._useTexture(gradient?.texture ?? this.white, { radial: gradient?.kind === "radial", whiteFlash: gradient?.whiteFlash ?? false, gradient });
     rgba(colorValue);
     if (!Number.isFinite(width) || width <= 0) throw new RangeError("line width must be positive");
     if (!["butt", "round", "square"].includes(lineCap) || !["miter", "round", "bevel"].includes(lineJoin) || !Number.isFinite(miterLimit) || miterLimit <= 0) throw new TypeError("invalid stroke style");
@@ -1171,18 +1402,19 @@ var VectorRenderer = class {
     }
     const depth = this.groups.filter((g) => !g.direct).length;
     let target = this.groupTargets[depth];
-    const allocation = (n) => Math.min(this.device.maxTextureSize, 2 ** Math.ceil(Math.log2(n)));
-    const needW = allocation(width), needH = allocation(height);
-    if (!target || target.width < width || target.height < height) {
+    const allocation = (n) => Math.min(this.device.maxTextureSize, 2 ** Math.ceil(Math.log2(n))), needW = allocation(width), needH = allocation(height), needStencil = this.device.stencilAvailable;
+    if (!target || target.width < width || target.height < height || Boolean(this.device.renderTargets.get(target)?.stencil) !== needStencil) {
       if (target) this.device.deleteRenderTarget(target);
-      target = this.groupTargets[depth] = this.device.createRenderTarget(needW, needH, { filter: "nearest" });
+      target = this.groupTargets[depth] = this.device.createRenderTarget(needW, needH, { filter: "nearest", stencil: needStencil });
     }
-    const group = { target, opacity, bounds: { x, y, width, height }, matrix: this.matrix.slice(), clips: this.clips, projection: this.projection.slice() };
+    const group = { target, opacity, bounds: { x, y, width, height }, matrix: this.matrix.slice(), clips: this.clips, stencilClips: this.stencilClips.slice(), projection: this.projection.slice() };
     this.device.bindRenderTarget(target);
-    this.device.clear({ color: [0, 0, 0, 0] });
     this.groups.push(group);
-    this.clips = [...this.clips, [{ x, y }, { x: right, y }, { x: right, y: bottom }, { x, y: bottom }]];
     this._setProjection(group.bounds, target);
+    this.device.clear({ color: [0, 0, 0, 0], ...this.device.activeStencilAvailable ? { stencil: 0 } : {} });
+    this.stencilDepth = 0;
+    if (this.stencilClips.length) this._rebuildStencil();
+    this.clips = [...this.clips, [{ x, y }, { x: right, y }, { x: right, y: bottom }, { x, y: bottom }]];
   }
   endGroup() {
     this._frame();
@@ -1193,6 +1425,8 @@ var VectorRenderer = class {
     this.device.unbindRenderTarget(group.target);
     this.matrix = group.matrix;
     this.clips = group.clips;
+    this.stencilClips = group.stencilClips;
+    this.stencilDepth = this.stencilClips.length;
     this.projection.set(group.projection);
     this._useTexture(group.target);
     const { x, y, width, height } = group.bounds, u = width / group.target.width, v = height / group.target.height, a = { x, y }, b = { x: x + width, y }, c = { x: x + width, y: y + height }, d = { x, y: y + height }, alpha = [1, 1, 1, group.opacity];
@@ -1204,12 +1438,18 @@ var VectorRenderer = class {
   dispose() {
     if (this.state === "disposed") return;
     this.canvas.removeEventListener("webglcontextlost", this.onLost);
+    this.canvas.removeEventListener("webglcontextrestored", this.onRestored);
     this.count = 0;
     for (const target of this.groupTargets) this.device.deleteRenderTarget(target);
+    for (const record of this.clipPaths.values()) this.device.deleteVertexBuffer(record.buffer);
+    this.clipPaths.clear();
+    this.clipPathBytes = 0;
+    this.device.deleteVertexBuffer(this.dynamicClipBuffer);
     this.device.deleteVertexBuffer(this.buffer);
+    this.device.deletePipeline(this.clipPipeline);
     this.device.deletePipeline(this.pipeline);
     this.device.deleteTexture(this.white);
-    this.buffer = this.pipeline = this.white = null;
+    this.buffer = this.dynamicClipBuffer = this.clipPipeline = this.pipeline = this.white = null;
     this.state = "disposed";
   }
 };
@@ -1226,16 +1466,35 @@ var ATTRIBUTES = [
   { name: "a_part", size: 1, offset: 40 }
 ];
 var INSTANCE_ATTRIBUTES = ["i_row0", "i_row1", "i_color", "i_params"].map((name, i) => ({ name, size: 4, offset: i * 16, source: "instance" }));
-function shader(instanced, partCount, morphCount, clipped) {
+function shader(instanced, partCount, morphCount, clipped, nonScalingStroke) {
   const inputs = ["i_row0", "i_row1", "i_color", "i_params"].map((name) => `${instanced ? "attribute" : "uniform"} vec4 ${name};`).join("\n");
   const local = morphCount ? "a_position+a_morph.xy*(i_params.x" + (partCount > 1 ? "+pose.x" : "") + ")" + (morphCount > 1 ? "+a_morph.zw*(i_params.y" + (partCount > 1 ? "+pose.y" : "") + ")" : "") : "a_position";
+  const strokeInputs = nonScalingStroke ? "attribute vec4 a_stroke;uniform vec2 u_strokeViewportSize;" : "";
+  const strokeVarying = clipped && nonScalingStroke ? "uniform mat3 u_inverseProjection;" : "";
+  const strokePosition = nonScalingStroke ? `
+vec2 tangentLocal=local+a_stroke.xy;
+vec2 tangentPart=${partCount > 1 ? "vec2(dot(row0.xyz,vec3(tangentLocal,1.0)),dot(row1.xyz,vec3(tangentLocal,1.0)))" : "tangentLocal"};
+vec2 tangentWorld=vec2(dot(i_row0.xyz,vec3(tangentPart,1.0)),dot(i_row1.xyz,vec3(tangentPart,1.0)));
+vec3 tangentProjected=u_projection*vec3(tangentWorld,1.0);
+vec2 tangent=(tangentProjected.xy/tangentProjected.z-projected.xy/projected.z)*u_strokeViewportSize*0.5;float tangentLength=length(tangent);
+if(dot(a_stroke.xy,a_stroke.xy)>0.5){
+  if(tangentLength<0.000001){projected.z=0.0;}
+  else{
+    tangent/=tangentLength;vec2 normal=vec2(-tangent.y,tangent.x);
+    vec2 pxOffset=tangent*a_stroke.z+normal*a_stroke.w;
+    vec2 clipOffset=pxOffset*2.0/u_strokeViewportSize;
+    projected.xy+=clipOffset*projected.z;
+    ${clipped ? "vec3 clippedWorld=u_inverseProjection*vec3(projected.xy,projected.z);v_position=clippedWorld.xy/clippedWorld.z;" : ""}
+  }
+}` : "";
   return `attribute vec2 a_position; attribute vec4 a_color; ${morphCount ? "attribute vec4 a_morph;" : ""} ${partCount > 1 ? "attribute float a_part;uniform vec4 u_parts[" + partCount * 3 + "];" : ""}
-${inputs}
-uniform mat3 u_projection; varying vec4 v_color; ${clipped ? "varying vec2 v_position;" : ""}
+${inputs}${strokeInputs}
+uniform mat3 u_projection; varying vec4 v_color; ${clipped ? "varying vec2 v_position;" : ""}${strokeVarying}
 void main(){${partCount > 1 ? "int index=int(a_part)*3;vec4 row0=u_parts[index];vec4 row1=u_parts[index+1];vec4 pose=u_parts[index+2];" : ""}
 vec2 local=${local};vec2 p=${partCount > 1 ? "vec2(dot(row0.xyz,vec3(local,1.0)),dot(row1.xyz,vec3(local,1.0)))" : "local"};
 vec2 world=vec2(dot(i_row0.xyz,vec3(p,1.0)),dot(i_row1.xyz,vec3(p,1.0)));
-vec3 projected=u_projection*vec3(world,1.0);gl_Position=vec4(projected.xy,(i_params.w+${partCount > 1 ? "pose.w" : "0.0"})*projected.z,projected.z);${clipped ? "v_position=world;" : ""}
+vec3 projected=u_projection*vec3(world,1.0);${clipped ? "v_position=world;" : ""}${strokePosition}
+gl_Position=vec4(projected.xy,(i_params.w+${partCount > 1 ? "pose.w" : "0.0"})*projected.z,projected.z);
 vec4 color=mix(a_color*i_color,i_color,i_row1.w);color.a*=i_row0.w${partCount > 1 ? "*pose.z" : ""};
 color.rgb=mix(color.rgb,vec3(1.0),i_params.z);v_color=vec4(color.rgb*color.a,color.a);}`;
 }
@@ -1248,6 +1507,13 @@ void main(){for(int i=0;i<${maxPlanes};i++){if(i>=u_planeCount)break;if(dot(u_pl
 function finiteArray2(value, size, name) {
   if (!value || value.length !== size) throw new TypeError(`${name}: ${size} finite numbers required`);
   for (let i = 0; i < size; i++) if (!Number.isFinite(value[i])) throw new TypeError(`${name}: ${size} finite numbers required`);
+}
+function invertProjection(projection) {
+  const [a, d, g, b, e, h, c, f, i] = projection;
+  const A = e * i - f * h, B = f * g - d * i, C = d * h - e * g, D = c * h - b * i, E = a * i - c * g, F = b * g - a * h, G = b * f - c * e, H = c * d - a * f, I = a * e - b * d;
+  const determinant = a * A + b * B + c * C;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) throw new RangeError("Non-scaling strokes require an invertible projection");
+  return Float32Array.from([A, B, C, D, E, F, G, H, I], (value) => value / determinant);
 }
 function packParts(parts, count, output) {
   if (parts !== null && (!Array.isArray(parts) || parts.length !== count)) throw new TypeError("One pose per authored mesh part required");
@@ -1297,13 +1563,55 @@ function clipState(clips, maxPlanes) {
   if (values.length / 3 > maxPlanes) throw new RangeError(`Mesh clipping exceeds ${maxPlanes} edge planes`);
   return { key: key.join(","), values, count: values.length / 3 };
 }
+function meshPartBounds(vertices, partCount, morphCount) {
+  const bounds = Array.from({ length: partCount }, () => ({
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+    minDx0: Infinity,
+    minDy0: Infinity,
+    maxDx0: -Infinity,
+    maxDy0: -Infinity,
+    minDx1: Infinity,
+    minDy1: Infinity,
+    maxDx1: -Infinity,
+    maxDy1: -Infinity
+  }));
+  for (let at = 0; at < vertices.length; at += 11) {
+    const bound = bounds[vertices[at + 10]], x = vertices[at], y = vertices[at + 1];
+    bound.minX = Math.min(bound.minX, x);
+    bound.maxX = Math.max(bound.maxX, x);
+    bound.minY = Math.min(bound.minY, y);
+    bound.maxY = Math.max(bound.maxY, y);
+    const dx0 = morphCount > 0 ? vertices[at + 6] : 0, dy0 = morphCount > 0 ? vertices[at + 7] : 0;
+    const dx1 = morphCount > 1 ? vertices[at + 8] : 0, dy1 = morphCount > 1 ? vertices[at + 9] : 0;
+    bound.minDx0 = Math.min(bound.minDx0, dx0);
+    bound.maxDx0 = Math.max(bound.maxDx0, dx0);
+    bound.minDy0 = Math.min(bound.minDy0, dy0);
+    bound.maxDy0 = Math.max(bound.maxDy0, dy0);
+    bound.minDx1 = Math.min(bound.minDx1, dx1);
+    bound.maxDx1 = Math.max(bound.maxDx1, dx1);
+    bound.minDy1 = Math.min(bound.minDy1, dy1);
+    bound.maxDy1 = Math.max(bound.maxDy1, dy1);
+  }
+  for (const bound of bounds) {
+    if (!Number.isFinite(bound.minX)) {
+      bound.minX = bound.minY = bound.maxX = bound.maxY = 0;
+    }
+    for (const key of ["minDx0", "minDy0", "maxDx0", "maxDy0", "minDx1", "minDy1", "maxDx1", "maxDy1"]) if (!Number.isFinite(bound[key])) bound[key] = 0;
+  }
+  return bounds;
+}
 var MeshRenderer = class {
-  constructor(device, { maxMeshes = 512, maxMeshBytes = 32 * 1024 * 1024, maxInstances = 2048 } = {}) {
+  constructor(device, { maxMeshes = 512, maxMeshBytes = 32 * 1024 * 1024, maxInstances = 2048, safeAlphaRunBatching = true } = {}) {
     for (const [key, value] of Object.entries({ maxMeshes, maxMeshBytes, maxInstances })) if (!Number.isSafeInteger(value) || value < 1) throw new RangeError(`${key} must be positive`);
+    if (typeof safeAlphaRunBatching !== "boolean") throw new TypeError("safeAlphaRunBatching must be a boolean");
     this.device = device;
     this.maxMeshes = maxMeshes;
     this.maxMeshBytes = maxMeshBytes;
     this.maxInstances = maxInstances;
+    this.safeAlphaRunBatching = safeAlphaRunBatching;
     if (maxInstances * 64 > device.maxBufferBytes) throw new RangeError("Mesh instance buffer exceeds device byte limit");
     this.maxPlanes = Math.max(1, Math.min(32, device.gl.getParameter(device.gl.MAX_FRAGMENT_UNIFORM_VECTORS) - 2));
     this.instanced = device.instancingSupported === true;
@@ -1316,7 +1624,35 @@ var MeshRenderer = class {
     this.pending = null;
     this.planes = new Float32Array(this.maxPlanes * 3);
     this.partScratch = new Float32Array(16 * 12);
-    this.metrics = { draws: 0, instances: 0, geometryUploads: 0, geometryBytesUploaded: 0, instanceBytesUploaded: 0, partUniformBytesSubmitted: 0 };
+    this.alphaRunScratch = [];
+    this.alphaRunCache = /* @__PURE__ */ new WeakMap();
+    this.alphaQueue = new Array(maxInstances);
+    this.alphaQueueBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    this.alphaBoundsScratch = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    this.alphaQueueParts = new Float32Array(16 * 12);
+    this.alphaQueueCount = 0;
+    this.alphaQueueState = null;
+    this.metrics = {
+      draws: 0,
+      instances: 0,
+      geometryUploads: 0,
+      geometryBytesUploaded: 0,
+      instanceBytesUploaded: 0,
+      partUniformBytesSubmitted: 0,
+      alphaRunCacheHits: 0,
+      alphaRunCacheMisses: 0,
+      alphaRunSafeBatches: 0,
+      alphaRunBatchedInstances: 0,
+      alphaRunDrawsSaved: 0,
+      alphaRunSafeRunDraws: 0,
+      alphaRunImmediateRunDraws: 0,
+      alphaRunOverlapBoundaries: 0,
+      alphaRunSignatureBoundaries: 0,
+      alphaRunUnbatchableBounds: 0,
+      alphaRunImmediateInstances: 0,
+      flushReasons: /* @__PURE__ */ Object.create(null),
+      drawDispatchReasons: /* @__PURE__ */ Object.create(null)
+    };
     this.state = "ready";
     this.failure = null;
     this.onLost = () => {
@@ -1329,6 +1665,8 @@ var MeshRenderer = class {
         for (const mesh of this.meshes) {
           device.uploadVertices(mesh.buffer, mesh.vertices);
           if (mesh.indices) device.uploadIndices(mesh.indexBuffer, mesh.indices);
+          for (const variant of mesh.expressionIndices.values()) if (variant.indices.length) device.uploadIndices(variant.indexBuffer, variant.indices);
+          for (const variant of mesh.indexVariants.values()) if (variant.indices.length) device.uploadIndices(variant.indexBuffer, variant.indices);
         }
         this.state = "ready";
         this.failure = null;
@@ -1342,19 +1680,25 @@ var MeshRenderer = class {
     this.disposed = false;
   }
   _pipeline(mesh, clipped) {
-    const key = mesh.partCount + ":" + mesh.morphCount + ":" + Number(clipped);
+    const key = mesh.partCount + ":" + mesh.morphCount + ":" + Number(clipped) + ":" + Number(mesh.hasNonScalingStroke);
     let pipeline = this.pipelines.get(key);
     if (pipeline) return pipeline;
     const uniforms = { u_projection: "matrix3fv" };
     if (clipped) Object.assign(uniforms, { "u_planes[0]": "3fv", u_planeCount: "1i" });
+    if (mesh.hasNonScalingStroke) {
+      uniforms.u_strokeViewportSize = "2f";
+      if (clipped) uniforms.u_inverseProjection = "matrix3fv";
+    }
     if (mesh.partCount > 1) uniforms["u_parts[0]"] = "4fv";
     if (!this.instanced) for (const name of ["i_row0", "i_row1", "i_color", "i_params"]) uniforms[name] = "4f";
     pipeline = this.device.createPipeline({
-      vertex: shader(this.instanced, mesh.partCount, mesh.morphCount, clipped),
+      vertex: shader(this.instanced, mesh.partCount, mesh.morphCount, clipped, mesh.hasNonScalingStroke),
       fragment: fragment(this.maxPlanes, clipped),
-      stride: 44,
+      stride: mesh.strideFloats * 4,
       ...this.instanced ? { instanceStride: 64 } : {},
-      attributes: [...ATTRIBUTES, ...this.instanced ? INSTANCE_ATTRIBUTES : []],
+      attributes: [...mesh.hasNonScalingStroke ? ATTRIBUTES.filter((attribute) => attribute.name !== "a_morph") : ATTRIBUTES, ...mesh.hasNonScalingStroke ? [
+        { name: "a_stroke", size: 4, offset: 24 }
+      ] : [], ...this.instanced ? INSTANCE_ATTRIBUTES : []],
       uniforms
     });
     this.pipelines.set(key, pipeline);
@@ -1363,24 +1707,51 @@ var MeshRenderer = class {
   createMesh(data) {
     this._ready();
     const indices = data?.indices;
-    if (!(data?.vertices instanceof Float32Array) || data.vertices.length < 33 || data.vertices.length % 11 || data.strideFloats !== 11 || !Number.isSafeInteger(data.partCount) || data.partCount < 1 || data.partCount > 16 || !Number.isSafeInteger(data.morphCount) || data.morphCount < 0 || data.morphCount > 2 || indices !== void 0 && (!(indices instanceof Uint16Array) || indices.length < 3 || indices.length % 3 || data.vertices.length / 11 > 65536 || indices.some((index) => index >= data.vertices.length / 11)) || indices === void 0 && data.vertices.length % 33) throw new TypeError("Mesh geometry with complete triangles and 1..16 parts required");
+    const expressionIndices = data?.expressionIndices === void 0 ? {} : data.expressionIndices;
+    const indexVariants = data?.indexVariants === void 0 ? {} : data.indexVariants;
+    const nonScalingStroke = data?.nonScalingStroke ?? false;
+    if (!(data?.vertices instanceof Float32Array) || data.vertices.length < 33 || data.vertices.length % 11 || data.strideFloats !== 11 || typeof nonScalingStroke !== "boolean" || !Number.isSafeInteger(data.partCount) || data.partCount < 1 || data.partCount > 16 || !Number.isSafeInteger(data.morphCount) || data.morphCount < 0 || data.morphCount > 2 || indices !== void 0 && (!(indices instanceof Uint16Array) || indices.length < 3 || indices.length % 3 || data.vertices.length / 11 > 65536 || indices.some((index) => index >= data.vertices.length / 11)) || indices === void 0 && data.vertices.length % 33 || !expressionIndices || typeof expressionIndices !== "object" || Array.isArray(expressionIndices) || !indexVariants || typeof indexVariants !== "object" || Array.isArray(indexVariants)) throw new TypeError("Mesh geometry with complete triangles and 1..16 parts required");
+    const expressionEntries = Object.entries(expressionIndices), indexVariantEntries = Object.entries(indexVariants);
+    const variantNames = new Set(expressionEntries.map(([name]) => name));
+    if (expressionEntries.some(([name, variant]) => !name || !(variant instanceof Uint16Array) || variant.length % 3 || variant.some((index) => index >= data.vertices.length / 11)) || indexVariantEntries.some(([name, variant]) => !/^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$/.test(name) || variantNames.has(name) || !(variant instanceof Uint16Array) || variant.length % 3 || variant.some((index) => index >= data.vertices.length / 11))) {
+      throw new TypeError("Invalid named mesh index variants or expression index variants");
+    }
     if (data.vertices.some((n) => !Number.isFinite(n))) throw new TypeError("Mesh values must be finite");
     for (let i = 0; i < data.vertices.length; i++) {
       if (i % 11 >= 2 && i % 11 < 6 && (data.vertices[i] < 0 || data.vertices[i] > 1)) throw new RangeError("Mesh RGBA channels must be in [0,1]");
       if (i % 11 === 10 && (!Number.isSafeInteger(data.vertices[i]) || data.vertices[i] < 0 || data.vertices[i] >= data.partCount)) throw new RangeError("Mesh part index outside partCount");
-      if (i % 11 >= 6 + data.morphCount * 2 && i % 11 < 10 && data.vertices[i] !== 0) throw new RangeError("Mesh deltas exceed declared morphCount");
+      if (i % 11 >= 6 + data.morphCount * 2 && i % 11 < 10 && data.vertices[i] !== 0 && !nonScalingStroke) throw new RangeError("Mesh deltas exceed declared morphCount");
     }
-    const byteLength = data.vertices.byteLength + (indices?.byteLength ?? 0);
+    if (nonScalingStroke && data.morphCount) throw new TypeError("Non-scaling stroke meshes cannot use vertex morph targets");
+    const variantByteLength = [...expressionEntries, ...indexVariantEntries].reduce((total, [, variant]) => total + variant.byteLength, 0);
+    const byteLength = data.vertices.byteLength + (indices?.byteLength ?? 0) + variantByteLength;
     if (this.meshes.size >= this.maxMeshes || this.bytes + byteLength > this.maxMeshBytes) throw new RangeError("Retained mesh budget exceeded");
     const vertices = data.vertices.slice(), ownedIndices = indices?.slice(), buffer = this.device.createVertexBuffer({ capacityBytes: vertices.byteLength });
     let indexBuffer;
+    const ownedExpressions = /* @__PURE__ */ new Map(), ownedVariants = /* @__PURE__ */ new Map();
     try {
       this.device.uploadVertices(buffer, vertices);
       if (ownedIndices) {
         indexBuffer = this.device.createIndexBuffer({ capacityBytes: ownedIndices.byteLength });
         this.device.uploadIndices(indexBuffer, ownedIndices);
       }
+      for (const [name, source] of expressionEntries) {
+        const variantIndices = source.slice();
+        const variantBuffer = variantIndices.length ? this.device.createIndexBuffer({ capacityBytes: variantIndices.byteLength }) : null;
+        const variant = { indices: variantIndices, indexBuffer: variantBuffer, count: variantIndices.length };
+        ownedExpressions.set(name, variant);
+        if (variantBuffer) this.device.uploadIndices(variantBuffer, variantIndices);
+      }
+      for (const [name, source] of indexVariantEntries) {
+        const variantIndices = source.slice();
+        const variantBuffer = variantIndices.length ? this.device.createIndexBuffer({ capacityBytes: variantIndices.byteLength }) : null;
+        const variant = { indices: variantIndices, indexBuffer: variantBuffer, count: variantIndices.length };
+        ownedVariants.set(name, variant);
+        if (variantBuffer) this.device.uploadIndices(variantBuffer, variantIndices);
+      }
     } catch (error) {
+      for (const variant of ownedExpressions.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
+      for (const variant of ownedVariants.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
       if (indexBuffer) this.device.deleteIndexBuffer(indexBuffer);
       this.device.deleteVertexBuffer(buffer);
       throw error;
@@ -1391,10 +1762,15 @@ var MeshRenderer = class {
       indexBuffer,
       vertices,
       indices: ownedIndices,
+      expressionIndices: ownedExpressions,
+      indexVariants: ownedVariants,
       count: ownedIndices?.length ?? vertices.length / 11,
       byteLength,
       partCount: data.partCount,
-      morphCount: data.morphCount
+      morphCount: data.morphCount,
+      strideFloats: 11,
+      hasNonScalingStroke: nonScalingStroke,
+      partBounds: meshPartBounds(vertices, data.partCount, data.morphCount)
     });
     this.meshes.add(mesh);
     this.bytes += byteLength;
@@ -1404,9 +1780,12 @@ var MeshRenderer = class {
   }
   deleteMesh(mesh) {
     if (!this.meshes.has(mesh)) return false;
-    if (this.pending?.mesh === mesh) this.flush();
+    if (this.pending?.mesh === mesh || this.alphaQueueCount && this.alphaQueueState.mesh === mesh) this.flush("deleteMesh");
+    this.alphaRunCache.delete(mesh);
     this.device.deleteVertexBuffer(mesh.buffer);
     if (mesh.indexBuffer) this.device.deleteIndexBuffer(mesh.indexBuffer);
+    for (const variant of mesh.expressionIndices.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
+    for (const variant of mesh.indexVariants.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
     this.meshes.delete(mesh);
     this.bytes -= mesh.byteLength;
     return true;
@@ -1426,7 +1805,11 @@ var MeshRenderer = class {
       depth = 0,
       depthTest = false,
       depthWrite = false,
-      depthFunc = "lequal"
+      depthWriteAlphaThreshold = null,
+      depthFunc = "lequal",
+      indexVariant = null,
+      strokeViewport = null,
+      stencilRef = null
     } = options;
     this._drawMeshInstances(mesh, {
       matrices: matrix,
@@ -1439,11 +1822,113 @@ var MeshRenderer = class {
       alpha,
       whiteFlash,
       clips,
+      indexVariant,
       depth,
       depthTest,
       depthWrite,
-      depthFunc
+      depthWriteAlphaThreshold,
+      depthFunc,
+      strokeViewport,
+      stencilRef
     });
+  }
+  _screenBounds(mesh, matrices, instanceIndex, projection, morph) {
+    if (mesh.hasNonScalingStroke || projection[2] !== 0 || projection[5] !== 0 || Math.abs(projection[8]) < 1e-12) return null;
+    const width = this.device.activeRenderTarget?.width ?? this.device.canvas.width;
+    const height = this.device.activeRenderTarget?.height ?? this.device.canvas.height;
+    const matrixAt = instanceIndex * 6, m0 = matrices[matrixAt], m1 = matrices[matrixAt + 1], m2 = matrices[matrixAt + 2], m3 = matrices[matrixAt + 3], m4 = matrices[matrixAt + 4], m5 = matrices[matrixAt + 5];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let partIndex = 0; partIndex < mesh.partCount; partIndex++) {
+      const bound = mesh.partBounds[partIndex], at = partIndex * 12, poseMorph0 = morph[0] + this.partScratch[at + 8], poseMorph1 = morph[1] + this.partScratch[at + 9];
+      const x0 = bound.minX + (poseMorph0 < 0 ? bound.maxDx0 : bound.minDx0) * poseMorph0 + (poseMorph1 < 0 ? bound.maxDx1 : bound.minDx1) * poseMorph1;
+      const x1 = bound.maxX + (poseMorph0 < 0 ? bound.minDx0 : bound.maxDx0) * poseMorph0 + (poseMorph1 < 0 ? bound.minDx1 : bound.maxDx1) * poseMorph1;
+      const y0 = bound.minY + (poseMorph0 < 0 ? bound.maxDy0 : bound.minDy0) * poseMorph0 + (poseMorph1 < 0 ? bound.maxDy1 : bound.minDy1) * poseMorph1;
+      const y1 = bound.maxY + (poseMorph0 < 0 ? bound.minDy0 : bound.maxDy0) * poseMorph0 + (poseMorph1 < 0 ? bound.minDy1 : bound.maxDy1) * poseMorph1;
+      const pa = this.partScratch[at], pc = this.partScratch[at + 1], pe = this.partScratch[at + 2];
+      const pb = this.partScratch[at + 4], pd = this.partScratch[at + 5], pf = this.partScratch[at + 6];
+      for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) {
+        const x = xi ? x1 : x0, y = yi ? y1 : y0, partX = pa * x + pc * y + pe, partY = pb * x + pd * y + pf;
+        const worldX = m0 * partX + m2 * partY + m4, worldY = m1 * partX + m3 * partY + m5;
+        const clipX = projection[0] * worldX + projection[3] * worldY + projection[6], clipY = projection[1] * worldX + projection[4] * worldY + projection[7];
+        const px = (clipX / projection[8] + 1) * width / 2, py = (1 - clipY / projection[8]) * height / 2;
+        if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+        minX = Math.min(minX, px);
+        maxX = Math.max(maxX, px);
+        minY = Math.min(minY, py);
+        maxY = Math.max(maxY, py);
+      }
+    }
+    if (!Number.isFinite(minX)) return null;
+    const bounds = this.alphaBoundsScratch;
+    bounds.minX = minX - 1.5;
+    bounds.minY = minY - 1.5;
+    bounds.maxX = maxX + 1.5;
+    bounds.maxY = maxY + 1.5;
+    return bounds;
+  }
+  _boundsOverlap(a, b) {
+    return !(a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY);
+  }
+  _extendAlphaQueueBounds(bounds) {
+    const group = this.alphaQueueBounds;
+    if (!this.alphaQueueCount) Object.assign(group, bounds);
+    else {
+      group.minX = Math.min(group.minX, bounds.minX);
+      group.minY = Math.min(group.minY, bounds.minY);
+      group.maxX = Math.max(group.maxX, bounds.maxX);
+      group.maxY = Math.max(group.maxY, bounds.maxY);
+    }
+  }
+  _alphaQueueMatches(mesh, projection, clip, stencilRef, depthTest, depthFunc, indexVariant, runs) {
+    const state = this.alphaQueueState;
+    if (!state) return true;
+    if (state.mesh !== mesh || state.indexVariant !== indexVariant || state.clip.key !== clip.key || state.stencilRef !== stencilRef || state.depthTest !== depthTest || state.depthFunc !== depthFunc || state.runKey !== runs.join(",") || projection.some((n, i) => Math.fround(n) !== state.projection[i])) return false;
+    for (let i = 0; i < mesh.partCount * 12; i++) if (this.partScratch[i] !== this.alphaQueueParts[i]) return false;
+    return true;
+  }
+  _startAlphaQueue(mesh, projection, clip, stencilRef, depthTest, depthFunc, indexVariant, runs) {
+    this.alphaQueueParts.set(this.partScratch.subarray(0, mesh.partCount * 12));
+    this.alphaQueueState = { mesh, projection: Float32Array.from(projection), clip, stencilRef, depthTest, depthFunc, indexVariant, runs: runs.slice(), runKey: runs.join(",") };
+  }
+  _flushAlphaQueue(reason) {
+    if (!this.alphaQueueCount) return;
+    const state = this.alphaQueueState, mesh = state.mesh, parts = this.alphaQueueParts.subarray(0, mesh.partCount * 12);
+    const indexBufferVariant = state.indexVariant === null ? null : mesh.indexVariants.get(state.indexVariant) ?? mesh.expressionIndices.get(state.indexVariant);
+    const projection = state.projection, clip = state.clip, pipeline = this._pipeline(mesh, clip.count > 0), uniforms = { u_projection: projection };
+    this.planes.fill(0);
+    if (clip.values) this.planes.set(clip.values);
+    if (clip.count) Object.assign(uniforms, { "u_planes[0]": this.planes, u_planeCount: clip.count });
+    if (mesh.partCount > 1) uniforms["u_parts[0]"] = parts;
+    const instances = this.alphaQueueCount;
+    this.device.uploadVertices(this.instanceBuffer, this.instances.subarray(0, instances * 16));
+    this.metrics.instanceBytesUploaded += instances * 64;
+    for (let run = 0; run < state.runs.length; run += 3) {
+      this.device.draw({
+        pipeline,
+        buffer: mesh.buffer,
+        indexBuffer: indexBufferVariant?.indexBuffer ?? mesh.indexBuffer,
+        first: state.runs[run],
+        count: state.runs[run + 1],
+        instanceBuffer: this.instanceBuffer,
+        instances,
+        uniforms,
+        depth: { test: state.depthTest, write: state.runs[run + 2], func: state.depthFunc },
+        stencil: state.stencilRef === null ? false : { func: "equal", ref: state.stencilRef, mask: 255, writeMask: 0, pass: "keep" }
+      });
+      this.metrics.draws++;
+      this.metrics.drawDispatchReasons[reason] = (this.metrics.drawDispatchReasons[reason] ?? 0) + 1;
+      this.metrics.alphaRunSafeRunDraws++;
+      if (mesh.partCount > 1) this.metrics.partUniformBytesSubmitted += parts.byteLength;
+    }
+    this.metrics.instances += instances;
+    if (instances > 1) {
+      this.metrics.alphaRunSafeBatches++;
+      this.metrics.alphaRunBatchedInstances += instances;
+      this.metrics.alphaRunDrawsSaved += (instances - 1) * (state.runs.length / 3);
+    }
+    this.metrics.flushReasons[reason] = (this.metrics.flushReasons[reason] ?? 0) + 1;
+    this.alphaQueueCount = 0;
+    this.alphaQueueState = null;
   }
   /** Internal ordered instance append used when one retained pose has several transforms. */
   _drawMeshInstances(mesh, {
@@ -1463,19 +1948,43 @@ var MeshRenderer = class {
     depth = 0,
     depthTest = false,
     depthWrite = false,
-    depthFunc = "lequal"
+    depthWriteAlphaThreshold = null,
+    depthFunc = "lequal",
+    indexVariant = null,
+    strokeViewport = null,
+    stencilRef = null
   } = {}) {
     this._ready();
     if (!this.meshes.has(mesh)) throw new TypeError("Mesh owned by this renderer required");
+    if (indexVariant !== null && (typeof indexVariant !== "string" || !mesh.expressionIndices.has(indexVariant) && !mesh.indexVariants.has(indexVariant))) {
+      throw new TypeError("Known mesh index variant required");
+    }
     if (!this.device.active) throw new Error("beginFrame required");
+    if (stencilRef !== null && (!Number.isSafeInteger(stencilRef) || stencilRef < 0 || stencilRef > 255)) throw new RangeError("stencilRef must be null or in [0,255]");
+    if (stencilRef !== null && !this.device.activeStencilAvailable) throw new Error("A stencil-tested mesh requires an active stencil attachment");
     if (!Number.isSafeInteger(count) || count < 1 || !matrices || matrices.length !== count * 6) throw new TypeError("Packed mesh instance matrices required");
     for (let i = 0; i < matrices.length; i++) if (!Number.isFinite(matrices[i])) throw new TypeError("Mesh matrix values must be finite");
     finiteArray2(projection, 9, "projection");
     finiteArray2(morph, 2, "morph");
     finiteArray2(color2, 4, "color");
+    let strokeSize = null, inverseStrokeProjection = null;
+    if (mesh.hasNonScalingStroke) {
+      if (strokeViewport === null) {
+        if (this.device.activeRenderTarget) throw new Error("A strokeViewport is required for non-scaling strokes rendered to a render target");
+        strokeSize = [this.device.canvas.clientWidth, this.device.canvas.clientHeight];
+      } else {
+        finiteArray2(strokeViewport, 2, "strokeViewport");
+        strokeSize = [strokeViewport[0], strokeViewport[1]];
+      }
+      if (strokeSize.some((value) => !Number.isFinite(value) || value <= 0)) throw new RangeError("Non-scaling strokes require a positive CSS-pixel viewport size");
+      inverseStrokeProjection = invertProjection(projection);
+    }
     if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || color2.some((n) => n < 0 || n > 1)) throw new RangeError("RGBA/alpha in [0,1] required");
     if (!Number.isFinite(depth) || depth < -1 || depth > 1) throw new RangeError("depth must be in [-1,1]");
     if (typeof depthTest !== "boolean" || typeof depthWrite !== "boolean") throw new TypeError("depthTest and depthWrite must be booleans");
+    if (depthWriteAlphaThreshold !== null && (!Number.isFinite(depthWriteAlphaThreshold) || depthWriteAlphaThreshold < 0 || depthWriteAlphaThreshold > 1)) {
+      throw new RangeError("depthWriteAlphaThreshold must be in [0,1]");
+    }
     if (!["never", "less", "equal", "lequal", "greater", "notequal", "gequal", "always"].includes(depthFunc)) throw new TypeError("Unsupported depthFunc");
     if (!Number.isSafeInteger(prefixCount) || prefixCount < 0 || prefixCount > count || !Number.isSafeInteger(forceColorPrefixCount) || forceColorPrefixCount < 0 || forceColorPrefixCount > count) throw new RangeError("Instance color prefix count is invalid");
     if (prefixCount && !prefixColor) throw new TypeError("A prefix color is required for colored mesh instances");
@@ -1484,19 +1993,168 @@ var MeshRenderer = class {
       if (prefixColor.some((n) => n < 0 || n > 1)) throw new RangeError("RGBA channels must be in [0,1]");
     }
     const clip = clipState(clips, this.maxPlanes), pending = this.pending;
+    const variant = indexVariant === null ? null : mesh.indexVariants.get(indexVariant) ?? mesh.expressionIndices.get(indexVariant);
     packParts(parts, mesh.partCount, this.partScratch);
     for (let i = 0; i < mesh.partCount; i++) if (depth + this.partScratch[i * 12 + 11] < -1 || depth + this.partScratch[i * 12 + 11] > 1) throw new RangeError("combined mesh and part depth must be in [-1,1]");
-    const depthStateKey = `${Number(depthTest)}:${Number(depthWrite)}:${depthFunc}`;
-    if (pending && (pending.mesh !== mesh || pending.clip.key !== clip.key || pending.depthStateKey !== depthStateKey || projection.some((n, i) => Math.fround(n) !== pending.projection[i]) || mesh.partCount > 1 && pending.parts.some((n, i) => n !== this.partScratch[i]) || this.count === this.maxInstances)) this.flush();
+    const depthStateKey = Number(depthTest) + ":" + Number(depthWrite) + ":" + depthFunc;
+    const alphaDepthWrite = depthWrite && depthWriteAlphaThreshold !== null;
+    if (!alphaDepthWrite) {
+      if (this.alphaQueueCount) this._flushAlphaQueue("alphaBoundary");
+      if (pending) {
+        const reason = pending.mesh !== mesh ? "mesh" : pending.indexVariant !== indexVariant ? "indexVariant" : pending.clip.key !== clip.key ? "clip" : pending.stencilRef !== stencilRef ? "stencil" : pending.depthStateKey !== depthStateKey ? "depthState" : projection.some((n, i) => Math.fround(n) !== pending.projection[i]) ? "projection" : mesh.partCount > 1 && pending.parts.some((n, i) => n !== this.partScratch[i]) ? "parts" : this.count === this.maxInstances ? "capacity" : null;
+        if (reason) this.flush(reason);
+      }
+      if (variant?.count === 0) return;
+      const part2 = this.partScratch, singlePart2 = mesh.partCount === 1;
+      for (let i = 0; i < count; i++) {
+        if (this.count === this.maxInstances) this.flush("capacity");
+        if (!this.pending) this.pending = {
+          mesh,
+          projection: Float32Array.from(projection),
+          clip,
+          stencilRef,
+          depthStateKey,
+          indexVariant,
+          strokeSize,
+          inverseStrokeProjection,
+          depthState: { test: depthTest, write: depthWrite, func: depthFunc },
+          parts: this.partScratch.slice(0, mesh.partCount > 1 ? mesh.partCount * 12 : 0)
+        };
+        const offset = i * 6;
+        let m0 = matrices[offset], m1 = matrices[offset + 1], m2 = matrices[offset + 2], m3 = matrices[offset + 3], m4 = matrices[offset + 4], m5 = matrices[offset + 5];
+        let weight0 = morph[0], weight1 = morph[1], instanceAlpha = alpha;
+        if (singlePart2) {
+          const a = m0, b = m1, c = m2, d = m3;
+          m0 = a * part2[0] + c * part2[4];
+          m1 = b * part2[0] + d * part2[4];
+          m2 = a * part2[1] + c * part2[5];
+          m3 = b * part2[1] + d * part2[5];
+          m4 = a * part2[2] + c * part2[6] + m4;
+          m5 = b * part2[2] + d * part2[6] + m5;
+          instanceAlpha *= part2[10];
+          weight0 += part2[8];
+          weight1 += part2[9];
+        }
+        const instanceColor = i < prefixCount ? prefixColor : color2;
+        const instanceForceColor = i < forceColorPrefixCount ? true : forceColor, at = this.count++ * 16, data = this.instances;
+        data[at] = m0;
+        data[at + 1] = m2;
+        data[at + 2] = m4;
+        data[at + 3] = instanceAlpha;
+        data[at + 4] = m1;
+        data[at + 5] = m3;
+        data[at + 6] = m5;
+        data[at + 7] = instanceForceColor ? 1 : 0;
+        data[at + 8] = instanceColor[0];
+        data[at + 9] = instanceColor[1];
+        data[at + 10] = instanceColor[2];
+        data[at + 11] = instanceColor[3];
+        const instanceDepth = depth + (singlePart2 ? part2[11] : 0);
+        data[at + 12] = weight0;
+        data[at + 13] = weight1;
+        data[at + 14] = whiteFlash ? 1 : 0;
+        data[at + 15] = instanceDepth;
+      }
+      return;
+    }
+    if (variant?.count === 0) return;
+    const indices = variant?.indices ?? mesh.indices;
+    const triangleCount = (variant?.count ?? mesh.count) / 3;
     const part = this.partScratch, singlePart = mesh.partCount === 1;
+    const writeAlphaInstance = (i, slot) => {
+      const offset = i * 6;
+      let m0 = matrices[offset], m1 = matrices[offset + 1], m2 = matrices[offset + 2], m3 = matrices[offset + 3], m4 = matrices[offset + 4], m5 = matrices[offset + 5];
+      let weight0 = morph[0], weight1 = morph[1], instanceAlpha = alpha;
+      if (singlePart) {
+        const a = m0, b = m1, c = m2, d = m3;
+        m0 = a * part[0] + c * part[4];
+        m1 = b * part[0] + d * part[4];
+        m2 = a * part[1] + c * part[5];
+        m3 = b * part[1] + d * part[5];
+        m4 = a * part[2] + c * part[6] + m4;
+        m5 = b * part[2] + d * part[6] + m5;
+        instanceAlpha *= part[10];
+        weight0 += part[8];
+        weight1 += part[9];
+      }
+      const instanceColor = i < prefixCount ? prefixColor : color2;
+      const instanceForceColor = i < forceColorPrefixCount ? true : forceColor, at = slot * 16, data = this.instances;
+      data[at] = m0;
+      data[at + 1] = m2;
+      data[at + 2] = m4;
+      data[at + 3] = instanceAlpha;
+      data[at + 4] = m1;
+      data[at + 5] = m3;
+      data[at + 6] = m5;
+      data[at + 7] = instanceForceColor ? 1 : 0;
+      data[at + 8] = instanceColor[0];
+      data[at + 9] = instanceColor[1];
+      data[at + 10] = instanceColor[2];
+      data[at + 11] = instanceColor[3];
+      data[at + 12] = weight0;
+      data[at + 13] = weight1;
+      data[at + 14] = whiteFlash ? 1 : 0;
+      data[at + 15] = depth + (singlePart ? part[11] : 0);
+    };
     for (let i = 0; i < count; i++) {
-      if (this.count === this.maxInstances) this.flush();
+      const instanceColor = i < prefixCount ? prefixColor : color2;
+      const instanceForceColor = i < forceColorPrefixCount ? true : forceColor;
+      const runs = this._collectAlphaDepthRuns(
+        mesh,
+        indices,
+        triangleCount,
+        depthWriteAlphaThreshold,
+        alpha * instanceColor[3],
+        instanceForceColor,
+        indexVariant
+      );
+      const totalVertices = triangleCount * 3;
+      const oneRun = runs.length === 3 && runs[0] === 0 && runs[1] === totalVertices;
+      if (!oneRun) {
+        const bounds = this.safeAlphaRunBatching && this.instanced ? this._screenBounds(mesh, matrices, i, projection, morph) : null;
+        if (bounds) {
+          if (this.count) this.flush("alphaDepthBoundary");
+          if (this.alphaQueueCount && !this._alphaQueueMatches(mesh, projection, clip, stencilRef, depthTest, depthFunc, indexVariant, runs)) {
+            this.metrics.alphaRunSignatureBoundaries++;
+            this._flushAlphaQueue("alphaSignature");
+          }
+          if (this.alphaQueueCount && this._boundsOverlap(bounds, this.alphaQueueBounds)) {
+            this.metrics.alphaRunOverlapBoundaries++;
+            this._flushAlphaQueue("alphaOverlap");
+          }
+          if (this.alphaQueueCount === this.maxInstances) this._flushAlphaQueue("capacity");
+          if (!this.alphaQueueCount) this._startAlphaQueue(mesh, projection, clip, stencilRef, depthTest, depthFunc, indexVariant, runs);
+          this._extendAlphaQueueBounds(bounds);
+          const slot = this.alphaQueueCount;
+          writeAlphaInstance(i, slot);
+          this.alphaQueueCount++;
+          continue;
+        }
+        if (this.safeAlphaRunBatching) this.metrics.alphaRunUnbatchableBounds++;
+        if (this.alphaQueueCount) this._flushAlphaQueue("alphaUnsupportedBoundary");
+        if (this.count) this.flush("alphaImmediateBoundary");
+        writeAlphaInstance(i, 0);
+        this._drawAlphaDepthRuns(mesh, variant, projection, clip, part.subarray(0, mesh.partCount * 12), runs, depthTest, depthFunc, strokeSize, inverseStrokeProjection, stencilRef);
+        this.metrics.alphaRunImmediateInstances++;
+        this.metrics.alphaRunImmediateRunDraws += runs.length / 3;
+        continue;
+      }
+      if (this.alphaQueueCount) this._flushAlphaQueue("singleRunBoundary");
+      const write = runs[2], stateKey = Number(depthTest) + ":" + Number(write) + ":" + depthFunc;
+      if (this.pending) {
+        const current = this.pending, reason = current.mesh !== mesh ? "mesh" : current.indexVariant !== indexVariant ? "indexVariant" : current.clip.key !== clip.key ? "clip" : current.stencilRef !== stencilRef ? "stencil" : current.depthStateKey !== stateKey ? "depthState" : projection.some((n, j) => Math.fround(n) !== current.projection[j]) ? "projection" : strokeSize && strokeSize.some((n, j) => n !== current.strokeSize?.[j]) ? "strokeViewport" : mesh.partCount > 1 && current.parts.some((n, j) => n !== this.partScratch[j]) ? "parts" : this.count === this.maxInstances ? "capacity" : null;
+        if (reason) this.flush(reason);
+      }
       if (!this.pending) this.pending = {
         mesh,
         projection: Float32Array.from(projection),
         clip,
-        depthStateKey,
-        depthState: { test: depthTest, write: depthWrite, func: depthFunc },
+        stencilRef,
+        depthStateKey: stateKey,
+        indexVariant,
+        strokeSize,
+        inverseStrokeProjection,
+        depthState: { test: depthTest, write, func: depthFunc },
         parts: this.partScratch.slice(0, mesh.partCount > 1 ? mesh.partCount * 12 : 0)
       };
       const offset = i * 6;
@@ -1514,8 +2172,7 @@ var MeshRenderer = class {
         weight0 += part[8];
         weight1 += part[9];
       }
-      const instanceColor = i < prefixCount ? prefixColor : color2;
-      const instanceForceColor = i < forceColorPrefixCount ? true : forceColor, at = this.count++ * 16, data = this.instances;
+      const at = this.count++ * 16, data = this.instances;
       data[at] = m0;
       data[at + 1] = m2;
       data[at + 2] = m4;
@@ -1528,52 +2185,150 @@ var MeshRenderer = class {
       data[at + 9] = instanceColor[1];
       data[at + 10] = instanceColor[2];
       data[at + 11] = instanceColor[3];
-      const instanceDepth = depth + (singlePart ? part[11] : 0);
       data[at + 12] = weight0;
       data[at + 13] = weight1;
       data[at + 14] = whiteFlash ? 1 : 0;
-      data[at + 15] = instanceDepth;
+      data[at + 15] = depth + (singlePart ? part[11] : 0);
     }
   }
-  flush() {
-    if (!this.count) return;
-    this._ready();
-    const { mesh, projection, clip, parts, depthState } = this.pending;
+  _collectAlphaDepthRuns(mesh, indices, triangleCount, threshold, opacity, forceColor, indexVariant) {
+    let cache = this.alphaRunCache.get(mesh);
+    if (!cache) {
+      cache = /* @__PURE__ */ new Map();
+      this.alphaRunCache.set(mesh, cache);
+    }
+    const partOpacities = [];
+    for (let i = 0; i < mesh.partCount; i++) partOpacities.push(this.partScratch[i * 12 + 10]);
+    const key = JSON.stringify([indexVariant, threshold, opacity, forceColor, partOpacities]);
+    const cached = cache.get(key);
+    if (cached) {
+      cache.delete(key);
+      cache.set(key, cached);
+      this.metrics.alphaRunCacheHits++;
+      return cached;
+    }
+    this.metrics.alphaRunCacheMisses++;
+    const runs = this.alphaRunScratch;
+    runs.length = 0;
+    if (opacity < threshold) {
+      runs.push(0, triangleCount * 3, false);
+    } else {
+      let runStart = 0, runWrite = null;
+      for (let triangle = 0; triangle < triangleCount; triangle++) {
+        let write = true;
+        for (let corner = 0; corner < 3; corner++) {
+          const indexOffset = triangle * 3 + corner, vertexOffset = (indices ? indices[indexOffset] : indexOffset) * mesh.strideFloats;
+          const partIndex = mesh.vertices[vertexOffset + 10];
+          const vertexAlpha = forceColor ? 1 : mesh.vertices[vertexOffset + 5];
+          const effectiveAlpha = opacity * vertexAlpha * this.partScratch[partIndex * 12 + 10];
+          if (effectiveAlpha <= 0 || effectiveAlpha < threshold) {
+            write = false;
+            break;
+          }
+        }
+        if (runWrite === null) {
+          runStart = triangle;
+          runWrite = write;
+        } else if (write !== runWrite) {
+          runs.push(runStart * 3, (triangle - runStart) * 3, runWrite);
+          runStart = triangle;
+          runWrite = write;
+        }
+      }
+      if (runWrite !== null) runs.push(runStart * 3, (triangleCount - runStart) * 3, runWrite);
+    }
+    if (runs.length <= 64) {
+      const stableRuns = runs.slice();
+      if (cache.size >= 16) cache.delete(cache.keys().next().value);
+      cache.set(key, stableRuns);
+      return stableRuns;
+    }
+    this.alphaRunScratch = [];
+    return runs;
+  }
+  _drawAlphaDepthRuns(mesh, variant, projection, clip, parts, runs, depthTest, depthFunc, strokeSize, inverseStrokeProjection, stencilRef) {
     this.planes.fill(0);
     if (clip.values) this.planes.set(clip.values);
     const pipeline = this._pipeline(mesh, clip.count > 0), uniforms = { u_projection: projection };
     if (clip.count) Object.assign(uniforms, { "u_planes[0]": this.planes, u_planeCount: clip.count });
+    if (mesh.hasNonScalingStroke) Object.assign(uniforms, { u_strokeViewportSize: strokeSize, ...clip.count ? { u_inverseProjection: inverseStrokeProjection } : {} });
+    if (mesh.partCount > 1) uniforms["u_parts[0]"] = parts;
+    if (!this.instanced) {
+      for (let j = 0; j < 4; j++) uniforms[["i_row0", "i_row1", "i_color", "i_params"][j]] = this.instances.subarray(j * 4, j * 4 + 4);
+    } else {
+      const instance = this.instances.subarray(0, 16);
+      this.device.uploadVertices(this.instanceBuffer, instance);
+      this.metrics.instanceBytesUploaded += instance.byteLength;
+    }
+    const indexBuffer = variant?.indexBuffer ?? mesh.indexBuffer;
+    for (let run = 0; run < runs.length; run += 3) {
+      this.device.draw({
+        pipeline,
+        buffer: mesh.buffer,
+        indexBuffer,
+        first: runs[run],
+        count: runs[run + 1],
+        instanceBuffer: this.instanceBuffer,
+        instances: 1,
+        uniforms,
+        depth: { test: depthTest, write: runs[run + 2], func: depthFunc },
+        stencil: stencilRef === null ? false : { func: "equal", ref: stencilRef, mask: 255, writeMask: 0, pass: "keep" }
+      });
+      this.metrics.draws++;
+      this.metrics.drawDispatchReasons.alphaImmediateRun = (this.metrics.drawDispatchReasons.alphaImmediateRun ?? 0) + 1;
+      if (mesh.partCount > 1) this.metrics.partUniformBytesSubmitted += parts.byteLength;
+    }
+    this.metrics.instances++;
+  }
+  flush(reason = "explicit") {
+    if (this.alphaQueueCount) this._flushAlphaQueue(reason);
+    if (!this.count) return;
+    this._ready();
+    const { mesh, projection, clip, parts, depthState, indexVariant, strokeSize, inverseStrokeProjection, stencilRef } = this.pending;
+    const variant = indexVariant === null ? null : mesh.indexVariants.get(indexVariant) ?? mesh.expressionIndices.get(indexVariant);
+    this.planes.fill(0);
+    if (clip.values) this.planes.set(clip.values);
+    const pipeline = this._pipeline(mesh, clip.count > 0), uniforms = { u_projection: projection };
+    if (clip.count) Object.assign(uniforms, { "u_planes[0]": this.planes, u_planeCount: clip.count });
+    if (mesh.hasNonScalingStroke) Object.assign(uniforms, { u_strokeViewportSize: strokeSize, ...clip.count ? { u_inverseProjection: inverseStrokeProjection } : {} });
     if (mesh.partCount > 1) uniforms["u_parts[0]"] = parts;
     if (this.instanced) {
       this.device.uploadVertices(this.instanceBuffer, this.instances.subarray(0, this.count * 16));
-      this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: mesh.indexBuffer, count: mesh.count, instanceBuffer: this.instanceBuffer, instances: this.count, uniforms, depth: depthState });
+      this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: variant?.indexBuffer ?? mesh.indexBuffer, count: variant?.count ?? mesh.count, instanceBuffer: this.instanceBuffer, instances: this.count, uniforms, depth: depthState, stencil: stencilRef === null ? false : { func: "equal", ref: stencilRef, mask: 255, writeMask: 0, pass: "keep" } });
       this.metrics.instanceBytesUploaded += this.count * 64;
       this.metrics.draws++;
-      this.metrics.partUniformBytesSubmitted += parts.byteLength;
+      this.metrics.drawDispatchReasons[reason] = (this.metrics.drawDispatchReasons[reason] ?? 0) + 1;
+      if (mesh.partCount > 1) this.metrics.partUniformBytesSubmitted += parts.byteLength;
     } else {
       for (let i = 0; i < this.count; i++) {
         for (let j = 0; j < 4; j++) uniforms[["i_row0", "i_row1", "i_color", "i_params"][j]] = this.instances.subarray(i * 16 + j * 4, i * 16 + j * 4 + 4);
-        this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: mesh.indexBuffer, count: mesh.count, uniforms, depth: depthState });
+        this.device.draw({ pipeline, buffer: mesh.buffer, indexBuffer: variant?.indexBuffer ?? mesh.indexBuffer, count: variant?.count ?? mesh.count, uniforms, depth: depthState, stencil: stencilRef === null ? false : { func: "equal", ref: stencilRef, mask: 255, writeMask: 0, pass: "keep" } });
         this.metrics.draws++;
-        this.metrics.partUniformBytesSubmitted += parts.byteLength;
+        this.metrics.drawDispatchReasons[reason] = (this.metrics.drawDispatchReasons[reason] ?? 0) + 1;
+        if (mesh.partCount > 1) this.metrics.partUniformBytesSubmitted += parts.byteLength;
       }
     }
     this.metrics.instances += this.count;
+    this.metrics.flushReasons[reason] = (this.metrics.flushReasons[reason] ?? 0) + 1;
     this.discard();
   }
   discard() {
     this.count = 0;
     this.pending = null;
+    this.alphaQueueCount = 0;
+    this.alphaQueueState = null;
   }
   _ready() {
     if (this.state !== "ready" || this.disposed) throw new Error(`MeshRenderer is ${this.state}${this.failure ? ": " + this.failure : ""}`);
   }
   beginFrame() {
     this.discard();
-    for (const key of Object.keys(this.metrics)) this.metrics[key] = 0;
+    for (const key of Object.keys(this.metrics)) if (key !== "flushReasons" && key !== "drawDispatchReasons") this.metrics[key] = 0;
+    this.metrics.flushReasons = /* @__PURE__ */ Object.create(null);
+    this.metrics.drawDispatchReasons = /* @__PURE__ */ Object.create(null);
   }
   stats() {
-    return { ...this.metrics, state: this.state, failure: this.failure, pipelineCount: this.pipelines.size, meshCount: this.meshes.size, retainedBytes: this.bytes, stagingBytes: this.instances.byteLength + this.planes.byteLength + this.partScratch.byteLength, instanced: this.instanced, maxClipPlanes: this.maxPlanes };
+    return { ...this.metrics, flushReasons: { ...this.metrics.flushReasons }, drawDispatchReasons: { ...this.metrics.drawDispatchReasons }, pendingAlphaRunInstances: this.alphaQueueCount, safeAlphaRunBatching: this.safeAlphaRunBatching, state: this.state, failure: this.failure, pipelineCount: this.pipelines.size, meshCount: this.meshes.size, retainedBytes: this.bytes, stagingBytes: this.instances.byteLength + this.planes.byteLength + this.partScratch.byteLength, instanced: this.instanced, maxClipPlanes: this.maxPlanes };
   }
   dispose() {
     if (this.disposed) return;
@@ -1583,9 +2338,13 @@ var MeshRenderer = class {
     for (const mesh of this.meshes) {
       this.device.deleteVertexBuffer(mesh.buffer);
       if (mesh.indexBuffer) this.device.deleteIndexBuffer(mesh.indexBuffer);
+      for (const variant of mesh.expressionIndices.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
+      for (const variant of mesh.indexVariants.values()) if (variant.indexBuffer) this.device.deleteIndexBuffer(variant.indexBuffer);
     }
     this.meshes.clear();
     this.bytes = 0;
+    this.alphaRunCache = /* @__PURE__ */ new WeakMap();
+    this.alphaRunScratch.length = 0;
     if (this.instanceBuffer) this.device.deleteVertexBuffer(this.instanceBuffer);
     for (const pipeline of this.pipelines.values()) this.device.deletePipeline(pipeline);
     this.pipelines.clear();
@@ -1596,6 +2355,9 @@ var MeshRenderer = class {
 
 // modules/rendering/vector-context.js
 var TAU = Math.PI * 2;
+var MAX_LINEAR_GRADIENT_STOPS = 32;
+var LINEAR_GRADIENT_SIZE = 1024;
+var MAX_GRADIENT_TEXTURES = 64;
 var SILHOUETTE_OFFSETS = Object.freeze(Array.from({ length: 8 }, (_, i) => Object.freeze([Math.cos(i * TAU / 8), Math.sin(i * TAU / 8)])));
 var IDENTITY3 = Object.freeze([1, 0, 0, 1, 0, 0]);
 var WHITE3 = Object.freeze([1, 1, 1, 1]);
@@ -1690,13 +2452,14 @@ function invert(matrix) {
 }
 var RadialGradient = class {
   constructor(matrix, x0, y0, r0, x1, y1, r1) {
-    if (Math.hypot(x1 - x0, y1 - y0) > 1e-8) throw new Error("Radial gradients require concentric circles");
     for (const [n, v] of Object.entries({ x0, y0, r0, x1, y1, r1 })) finite2(v, n);
     if (r0 < 0 || r1 < 0) throw new RangeError("Gradient radii must be non-negative");
     this.matrix = matrix.slice();
-    this.x = x1;
-    this.y = y1;
+    this.x0 = x0;
+    this.y0 = y0;
     this.r0 = r0;
+    this.x1 = x1;
+    this.y1 = y1;
     this.r1 = r1;
     this.stops = [];
     this.pixels = null;
@@ -1713,7 +2476,7 @@ var RadialGradient = class {
     if (this.pixels) return this.pixels;
     const data = new Uint8Array(256 * 4), stops = this.stops.length ? this.stops : [{ offset: 0, color: [0, 0, 0, 0] }];
     for (let i = 0; i < 256; i++) {
-      const t = (i / 255 * this.r1 - this.r0) / Math.max(1e-8, this.r1 - this.r0);
+      const t = i / 255;
       let lo = stops[0], hi = stops.at(-1);
       for (let j = 1; j < stops.length; j++) if (t < stops[j].offset) {
         lo = stops[j - 1];
@@ -1728,8 +2491,61 @@ var RadialGradient = class {
     return data;
   }
 };
+var LinearGradient = class {
+  constructor(matrix, x0, y0, x1, y1) {
+    for (const [name, value] of Object.entries({ x0, y0, x1, y1 })) finite2(value, name);
+    this.matrix = matrix.slice();
+    this.x0 = x0;
+    this.y0 = y0;
+    this.x1 = x1;
+    this.y1 = y1;
+    this.stops = [];
+    this.pixels = null;
+    this.revision = 0;
+  }
+  addColorStop(offset, value) {
+    if (!Number.isFinite(offset) || offset < 0 || offset > 1) throw new RangeError("Invalid gradient stop");
+    if (this.stops.length >= MAX_LINEAR_GRADIENT_STOPS) throw new RangeError(`Linear gradients support at most ${MAX_LINEAR_GRADIENT_STOPS} color stops`);
+    const stop = { offset, color: normalizeColor(value), order: this.stops.length };
+    this.stops.push(stop);
+    this.stops.sort((a, b) => a.offset - b.offset || a.order - b.order);
+    this.pixels = null;
+    this.revision++;
+  }
+  raster() {
+    if (this.pixels) return this.pixels;
+    const data = new Uint8Array(LINEAR_GRADIENT_SIZE * 4), stops = this.stops;
+    for (let i = 0; i < LINEAR_GRADIENT_SIZE; i++) {
+      const t = i / (LINEAR_GRADIENT_SIZE - 1);
+      let lo, hi, q;
+      if (!stops.length) {
+        lo = hi = { color: [0, 0, 0, 0] };
+        q = 0;
+      } else if (stops.length === 1 || t < stops[0].offset) {
+        lo = hi = stops[0];
+        q = 0;
+      } else {
+        let next = 0;
+        while (next < stops.length && t >= stops[next].offset) next++;
+        if (next === stops.length) {
+          lo = hi = stops.at(-1);
+          q = 0;
+        } else {
+          lo = stops[next - 1];
+          hi = stops[next];
+          q = (t - lo.offset) / (hi.offset - lo.offset);
+        }
+      }
+      const alpha = lo.color[3] + (hi.color[3] - lo.color[3]) * q, at = i * 4;
+      for (let k = 0; k < 3; k++) data[at + k] = Math.round((lo.color[k] + (hi.color[k] - lo.color[k]) * q) * alpha * 255);
+      data[at + 3] = Math.round(alpha * 255);
+    }
+    this.pixels = data;
+    return data;
+  }
+};
 var VectorContext = class {
-  constructor(device, { vectorRenderer = null, glyphAtlas = vectorRenderer?.glyphAtlas ?? null, initialVertices = 4096, maxVertices = 262144, onError = null } = {}) {
+  constructor(device, { vectorRenderer = null, glyphAtlas = vectorRenderer?.glyphAtlas ?? null, initialVertices = 4096, maxVertices = 262144, onError = null, safeAlphaRunBatching = true } = {}) {
     if (!device?.beginFrame || !device?.endFrame || !device?.createVertexBuffer) throw new TypeError("WebGLDevice is required");
     if (vectorRenderer && vectorRenderer.device !== device) throw new TypeError("vectorRenderer must use the supplied WebGLDevice");
     this.device = device;
@@ -1738,6 +2554,8 @@ var VectorContext = class {
     this.ownsVector = !vectorRenderer;
     this.glyphAtlas = glyphAtlas ?? this.vector.glyphAtlas;
     this.onError = typeof onError === "function" ? onError : null;
+    if (typeof safeAlphaRunBatching !== "boolean") throw new TypeError("safeAlphaRunBatching must be a boolean");
+    this.safeAlphaRunBatching = safeAlphaRunBatching;
     this.meshRenderer = null;
     this.active = false;
     this.state = "ready";
@@ -1754,7 +2572,6 @@ var VectorContext = class {
       this.active = false;
       this.state = "lost";
       this.meshRenderer?.discard();
-      this._releaseGradientTextures();
     };
     this.onRestored = () => {
       if (this.state === "disposed") return;
@@ -1798,14 +2615,14 @@ var VectorContext = class {
     return this._fillStyle;
   }
   set fillStyle(v) {
-    if (!(v instanceof RadialGradient)) normalizeColor(v);
+    if (!(v instanceof RadialGradient) && !(v instanceof LinearGradient)) normalizeColor(v);
     this._fillStyle = v;
   }
   get strokeStyle() {
     return this._strokeStyle;
   }
   set strokeStyle(v) {
-    normalizeColor(v);
+    if (!(v instanceof RadialGradient) && !(v instanceof LinearGradient)) normalizeColor(v);
     this._strokeStyle = v;
   }
   get lineWidth() {
@@ -1872,11 +2689,14 @@ var VectorContext = class {
     if (v !== "none" && v !== "brightness(0) invert(1)") throw new RangeError("VectorContext supports only none and brightness(0) invert(1) filters");
     this._filter = v;
   }
+  get stencilRef() {
+    return this.vector.stencilDepth || null;
+  }
   _frame() {
     if (!this.active || this.device.state !== "ready") throw new Error("VectorContext frame is unavailable");
   }
   _paint(style) {
-    if (style instanceof RadialGradient) throw new TypeError("RadialGradient paint must be submitted through fill()");
+    if (style instanceof RadialGradient || style instanceof LinearGradient) throw new TypeError("Gradient paint must be submitted through a vector fill or stroke");
     const color2 = normalizeColor(this.forceColor ?? style);
     color2[3] *= this._globalAlpha;
     if (this._filter === "brightness(0) invert(1)") color2[0] = color2[1] = color2[2] = 1;
@@ -1885,18 +2705,30 @@ var VectorContext = class {
   _gradientPaint(gradient) {
     let cached = this.gradientTextures.get(gradient);
     if (!cached) {
-      cached = { texture: this.device.createTexture({ width: 256, height: 1, data: gradient.raster() }, { format: "rgba", premultiplied: true, filter: "linear" }), revision: gradient.revision };
+      if (this.gradientTextures.size >= MAX_GRADIENT_TEXTURES) {
+        const expired = [...this.gradientTextures].find(([, entry]) => entry.lastFrame < this.frame);
+        if (!expired) throw new RangeError(`VectorContext supports at most ${MAX_GRADIENT_TEXTURES} distinct gradients in one frame`);
+        this.device.deleteTexture(expired[1].texture);
+        this.gradientTextures.delete(expired[0]);
+      }
+      const linear = gradient instanceof LinearGradient, width = linear ? LINEAR_GRADIENT_SIZE : 256, height = 1, data = gradient.raster();
+      cached = { texture: this.device.createTexture({ width, height, data }, { format: "rgba", premultiplied: true, filter: "linear" }), revision: gradient.revision, lastFrame: this.frame, linear };
       this.gradientTextures.set(gradient, cached);
     } else if (cached.revision !== gradient.revision) {
       this.vector.flush();
-      this.device.updateTexture(cached.texture, { width: 256, height: 1, data: gradient.raster() });
+      const linear = gradient instanceof LinearGradient, width = linear ? LINEAR_GRADIENT_SIZE : 256;
+      this.device.updateTexture(cached.texture, { width, height: 1, data: gradient.raster() });
       cached.revision = gradient.revision;
+      cached.linear = linear;
     }
+    cached.lastFrame = this.frame;
     const matrixInverse = invert(gradient.matrix);
-    if (!matrixInverse) throw new RangeError("Radial gradient transform is singular");
+    if (!matrixInverse) throw new RangeError("Gradient transform is singular");
     const color2 = normalizeColor(this.forceColor ?? [1, 1, 1, 1]);
     color2[3] *= this._globalAlpha;
-    return { texture: cached.texture, centerX: gradient.x, centerY: gradient.y, radius: gradient.r1, matrixInverse, color: color2, whiteFlash: this._filter === "brightness(0) invert(1)" };
+    if (gradient instanceof LinearGradient) return { texture: cached.texture, kind: "linear", gradient, x0: gradient.x0, y0: gradient.y0, x1: gradient.x1, y1: gradient.y1, matrixInverse, color: color2, whiteFlash: this._filter === "brightness(0) invert(1)" };
+    const dx = gradient.x1 - gradient.x0, dy = gradient.y1 - gradient.y0, dr = gradient.r1 - gradient.r0, scale = Math.max(1, Math.hypot(dx, dy), Math.abs(gradient.r0), Math.abs(gradient.r1));
+    return { texture: cached.texture, kind: "radial", gradient, x0: gradient.x0, y0: gradient.y0, radialScale: scale, radialParams: [dx / scale, dy / scale, gradient.r0 / scale, dr / scale], radialEmpty: dx === 0 && dy === 0 && dr === 0, matrixInverse, color: color2, whiteFlash: this._filter === "brightness(0) invert(1)" };
   }
   _releaseGradientTextures() {
     for (const [gradient, cached] of this.gradientTextures) {
@@ -1934,7 +2766,7 @@ var VectorContext = class {
   endFrame() {
     this._frame();
     try {
-      this.flush();
+      this.flush("frameEnd");
       const stats = this.device.endFrame();
       this.active = false;
       for (const mesh of this.deferredMeshes.splice(0)) this.deleteStaticMesh(mesh);
@@ -1943,12 +2775,10 @@ var VectorContext = class {
       this.total.drawCalls += this.frameStats.drawCalls;
       this.total.vertices += this.frameStats.vertices;
       this.total.uploadedBytes += this.frameStats.uploadedBytes;
-      this._releaseGradientTextures();
       return this.stats();
     } catch (error) {
       this.active = false;
       this.vector.count = 0;
-      this._releaseGradientTextures();
       this.onError?.(error, { phase: "endFrame" });
       throw error;
     }
@@ -1962,6 +2792,7 @@ var VectorContext = class {
     this._frame();
     const s = this.stack.pop();
     if (!s) return;
+    this.meshRenderer?.flush("stateRestore");
     this.vector.restore();
     Object.assign(this, { _fillStyle: s.fillStyle, _strokeStyle: s.strokeStyle, _globalAlpha: s.globalAlpha, _lineWidth: s.lineWidth, _lineCap: s.lineCap, _lineJoin: s.lineJoin, _miterLimit: s.miterLimit, _lineDash: s.lineDash, _lineDashOffset: s.lineDashOffset, _font: s.font, _textAlign: s.textAlign, _textBaseline: s.textBaseline, _direction: s.direction, _filter: s.filter, forceColor: s.forceColor });
   }
@@ -2065,8 +2896,9 @@ var VectorContext = class {
   }
   fill(rule = "nonzero") {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush("vectorBoundary");
     if (this._fillStyle instanceof RadialGradient) this.vector.fillRadialGradient({ ...this._gradientPaint(this._fillStyle), rule });
+    else if (this._fillStyle instanceof LinearGradient) this.vector.fillLinearGradient({ ...this._gradientPaint(this._fillStyle), rule });
     else this.vector.fill(this._paint(this._fillStyle), rule);
   }
   fillRect(x, y, w, h) {
@@ -2079,11 +2911,11 @@ var VectorContext = class {
   }
   stroke() {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush("vectorBoundary");
     if (!(this._lineWidth > 0)) return;
-    const m = this.vector.matrix, width = this._lineWidth * Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3])), paint = this._paint(this._strokeStyle), style = { lineCap: this._lineCap, lineJoin: this._lineJoin, miterLimit: this._miterLimit }, dash = this._lineDash, period = dash.reduce((a, b) => a + b, 0);
+    const m = this.vector.matrix, width = this._lineWidth * Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3])), gradient = this._strokeStyle instanceof RadialGradient || this._strokeStyle instanceof LinearGradient ? this._gradientPaint(this._strokeStyle) : null, paint = gradient ? gradient.color : this._paint(this._strokeStyle), style = { lineCap: this._lineCap, lineJoin: this._lineJoin, miterLimit: this._miterLimit }, dash = this._lineDash, period = dash.reduce((a, b) => a + b, 0);
     if (!dash.length || !period) {
-      this.vector.stroke(paint, width, style);
+      this.vector.stroke(paint, width, style, gradient);
       return;
     }
     const v = this.vector, original = v.path, matrix = v.matrix.slice();
@@ -2113,7 +2945,7 @@ var VectorContext = class {
         at = stop;
       }
     }
-    v.stroke(paint, width, style);
+    v.stroke(paint, width, style, gradient);
     v.matrix = matrix;
     v.path = original;
     v.cursor = original.at(-1)?.at(-1) ?? null;
@@ -2140,23 +2972,35 @@ var VectorContext = class {
     if (this.vector.path.filter((p) => p.length >= 3).length > 1) throw new RangeError("clip supports one contour per clip call");
     this.vector.clip(rule);
   }
+  createClipPath(points, { rule = "nonzero" } = {}) {
+    return this.vector.createClipPath(points, { rule });
+  }
+  clipPath(handle, { transform = null } = {}) {
+    this._frame();
+    this.meshRenderer?.flush("stencilChange");
+    this.vector.flush();
+    this.vector.clipPath(handle, { transform });
+  }
+  deleteClipPath(handle) {
+    return this.vector.deleteClipPath(handle);
+  }
   clipRect(x, y, w, h) {
     this._frame();
     this.vector.clipRect(x, y, w, h);
   }
   fillTriangleFan(points, paint = this._fillStyle) {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush("vectorBoundary");
     if (points.length < 3) return;
     this.vector.triangleFan(points, this._paint(paint));
   }
   beginGroup(opacity = 1, bounds = null) {
     this._frame();
-    if (opacity !== 1) this.meshRenderer?.flush();
+    if (opacity !== 1) this.meshRenderer?.flush("groupBoundary");
     this.vector.beginGroup(opacity, bounds);
   }
   endGroup() {
-    if (!this.vector.groups.at(-1)?.direct) this.meshRenderer?.flush();
+    if (!this.vector.groups.at(-1)?.direct) this.meshRenderer?.flush("groupBoundary");
     this.vector.endGroup();
   }
   withGroupOpacity(opacity, callback, bounds = null) {
@@ -2221,7 +3065,7 @@ var VectorContext = class {
   }
   fillText(text, x, y, maxWidth) {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush("vectorBoundary");
     if (!this.glyphAtlas) throw new Error("GlyphAtlas is not configured");
     const color2 = this._paint(this._fillStyle), fontSize = this._fontSize(), align = this._align(), baseline = this._textBaseline, measured = this.glyphAtlas.measureText(String(text), { fontSize }).width, scale = maxWidth && Number.isFinite(maxWidth) ? Math.min(1, maxWidth / (measured || 1)) : 1;
     if (scale !== 1) {
@@ -2238,7 +3082,7 @@ var VectorContext = class {
   }
   strokeText(text, x, y, maxWidth) {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush("vectorBoundary");
     if (!this.glyphAtlas) throw new Error("GlyphAtlas is not configured");
     const scale = maxWidth && Number.isFinite(maxWidth) ? Math.min(1, maxWidth / (this.glyphAtlas.measureText(String(text), { fontSize: this._fontSize() }).width || 1)) : 1;
     this.vector.save();
@@ -2253,13 +3097,16 @@ var VectorContext = class {
       this.vector.restore();
     }
   }
+  createLinearGradient(x0, y0, x1, y1) {
+    return new LinearGradient(this.vector.matrix, x0, y0, x1, y1);
+  }
   createRadialGradient(x0, y0, r0, x1, y1, r1) {
     return new RadialGradient(this.vector.matrix, x0, y0, r0, x1, y1, r1);
   }
   /** Retains caller-authored local-space triangles once; caller explicitly releases the handle. */
   createMesh(data) {
     if (this.state !== "ready" || this.device.state !== "ready") throw new Error("VectorContext is not ready");
-    this.meshRenderer ??= new MeshRenderer(this.device);
+    this.meshRenderer ??= new MeshRenderer(this.device, { safeAlphaRunBatching: this.safeAlphaRunBatching });
     return this.meshRenderer.createMesh(data);
   }
   deleteMesh(mesh) {
@@ -2276,7 +3123,7 @@ var VectorContext = class {
       const m = matrix, [a, b, c, d, e, f] = transform;
       matrix = [m[0] * a + m[2] * b, m[1] * a + m[3] * b, m[0] * c + m[2] * d, m[1] * c + m[3] * d, m[0] * e + m[2] * f + m[4], m[1] * e + m[3] * f + m[5]];
     }
-    this.meshRenderer.drawMesh(mesh, { matrix, projection: this.vector.projection, clips: this.vector.clips, morph, parts, color: this.forceColor ?? [1, 1, 1, 1], forceColor: this.forceColor !== null, alpha: this._globalAlpha, whiteFlash: this._filter === "brightness(0) invert(1)" });
+    this.meshRenderer.drawMesh(mesh, { matrix, projection: this.vector.projection, clips: this.vector.clips, morph, parts, color: this.forceColor ?? [1, 1, 1, 1], forceColor: this.forceColor !== null, alpha: this._globalAlpha, whiteFlash: this._filter === "brightness(0) invert(1)", stencilRef: this.vector.stencilDepth || null });
   }
   /** Draw a retained mesh silhouette and body in one ordered instance batch. */
   drawMeshSilhouette(mesh, { transform = null, morph = [0, 0], parts = null, color: color2 = "black", width, radius = 128, outlineScale = null } = {}) {
@@ -2318,12 +3165,12 @@ var VectorContext = class {
         matrices[at + 4] = a * te + c * tf + eOffset;
         matrices[at + 5] = b * te + d * tf + fOffset;
       }
-      this.meshRenderer._drawMeshInstances(mesh, { matrices, count, projection: this.vector.projection, morph, parts, color: this.forceColor ?? WHITE3, forceColor: this.forceColor !== null, prefixColor: outline, prefixCount: outlineInstances, forceColorPrefixCount: outlineInstances, alpha: this._globalAlpha, whiteFlash: this._filter === "brightness(0) invert(1)", clips: this.vector.clips });
+      this.meshRenderer._drawMeshInstances(mesh, { matrices, count, projection: this.vector.projection, morph, parts, color: this.forceColor ?? WHITE3, forceColor: this.forceColor !== null, prefixColor: outline, prefixCount: outlineInstances, forceColorPrefixCount: outlineInstances, alpha: this._globalAlpha, whiteFlash: this._filter === "brightness(0) invert(1)", clips: this.vector.clips, stencilRef: this.vector.stencilDepth || null });
     }, bounds);
   }
-  flush() {
+  flush(reason = "explicit") {
     this._frame();
-    this.meshRenderer?.flush();
+    this.meshRenderer?.flush(reason);
     this.vector.flush();
   }
   createStaticMesh(vertices, { strideFloats = 6 } = {}) {
@@ -2349,10 +3196,10 @@ var VectorContext = class {
   drawStaticMesh(mesh, { pipeline, projection, uniforms = {}, textures = [], blend = "source-over", depth = null } = {}) {
     this._frame();
     if (!mesh || mesh.context !== this || !this.staticMeshes.has(mesh) || !pipeline) throw new TypeError("mesh owned by this context and caller pipeline are required");
-    this.flush();
+    this.flush("staticMeshBoundary");
     const values = { ...uniforms };
     if (projection) values.u_projection = projection;
-    this.device.draw({ pipeline, buffer: mesh.buffer, count: mesh.count, uniforms: values, textures, blend, depth });
+    this.device.draw({ pipeline, buffer: mesh.buffer, count: mesh.count, uniforms: values, textures, blend, depth, stencil: this.vector.stencilDepth ? { func: "equal", ref: this.vector.stencilDepth, mask: 255, writeMask: 0, pass: "keep" } : false });
   }
   stats() {
     return { backend: "webgl1", available: this.device.state === "ready", contextLost: this.device.state === "lost", failure: this.device.failure ?? null, frame: this.frame, ...this.frameStats, mesh: this.meshRenderer?.stats() ?? null, stagingBytes: this.vector.vertices.byteLength, gpuBufferBytes: this.device.stats.gpuBufferBytes ?? 0, gpuRenderTargetBytes: this.device.stats.gpuRenderTargetBytes ?? 0, textureCount: this.device.stats.textureCount ?? 0, activeGradientTextureCount: this.gradientTextures.size, renderTargetCount: this.device.stats.renderTargetCount ?? 0, bufferAllocations: this.device.stats.bufferAllocations ?? 0, totals: { ...this.total } };
@@ -2443,6 +3290,9 @@ var PrimitivePainter = class {
 var PRIMITIVE_DIRECTIONS = /* @__PURE__ */ new Map();
 
 // modules/rendering/mesh-builder.js
+var INDEX_NAME = /^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$/;
+var isIndexMap = (map, vertexCount) => map !== null && typeof map === "object" && !Array.isArray(map) && Object.entries(map).every(([name, indices]) => INDEX_NAME.test(name) && indices instanceof Uint16Array && indices.length % 3 === 0 && indices.every((index) => index < vertexCount));
+var baseIndices = (geometry) => geometry.indices ?? Uint16Array.from({ length: geometry.vertices.length / 11 }, (_, index) => index);
 var MeshBuilder = class _MeshBuilder {
   constructor({ maxVertices = 262144 } = {}) {
     if (!Number.isSafeInteger(maxVertices) || maxVertices < 3) throw new RangeError("maxVertices must be >= 3");
@@ -2481,8 +3331,8 @@ var MeshBuilder = class _MeshBuilder {
   }
   /** Packs compatible authored geometries into one painter-ordered mesh without sorting. */
   static combine(geometries) {
-    if (!Array.isArray(geometries) || !geometries.length || geometries.some((geometry) => !Number.isSafeInteger(geometry?.partCount) || geometry.partCount < 1 || geometry.strideFloats !== 11 || !(geometry.vertices instanceof Float32Array) || geometry.vertices.length < 33 || geometry.vertices.length % 11 || geometry.indices !== void 0 && (!(geometry.indices instanceof Uint16Array) || geometry.indices.length < 3 || geometry.indices.length % 3 || geometry.vertices.length / 11 > 65536 || geometry.indices.some((index) => index >= geometry.vertices.length / 11)) || geometry.indices === void 0 && geometry.vertices.length % 33 || !Number.isSafeInteger(geometry.morphCount) || geometry.morphCount < 0 || geometry.morphCount > 2) || geometries.reduce((count, geometry) => count + geometry.partCount, 0) > 16) {
-      throw new TypeError("MeshBuilder geometries must fit within 16 parts and use the 11-float schema");
+    if (!Array.isArray(geometries) || !geometries.length || geometries.some((geometry) => !Number.isSafeInteger(geometry?.partCount) || geometry.partCount < 1 || geometry.strideFloats !== 11 || !(geometry.vertices instanceof Float32Array) || geometry.vertices.length < 33 || geometry.vertices.length % 11 || geometry.nonScalingStroke !== void 0 && typeof geometry.nonScalingStroke !== "boolean" || geometry.nonScalingStroke && geometry.morphCount !== 0 || geometry.indices !== void 0 && (!(geometry.indices instanceof Uint16Array) || geometry.indices.length < 3 || geometry.indices.length % 3 || geometry.vertices.length / 11 > 65536 || geometry.indices.some((index) => index >= geometry.vertices.length / 11)) || geometry.indices === void 0 && geometry.vertices.length % 33 || !Number.isSafeInteger(geometry.morphCount) || geometry.morphCount < 0 || geometry.morphCount > 2 || geometry.expressionIndices !== void 0 && !isIndexMap(geometry.expressionIndices, geometry.vertices.length / 11) || geometry.indexVariants !== void 0 && (!isIndexMap(geometry.indexVariants, geometry.vertices.length / 11) || Object.keys(geometry.indexVariants).length > 0)) || geometries.reduce((count, geometry) => count + geometry.partCount, 0) > 16) {
+      throw new TypeError("MeshBuilder geometries must fit within 16 parts, use the 11-float schema, and cannot flatten painter-order indexVariants");
     }
     const vertexCount = geometries.reduce((count, geometry) => count + geometry.vertices.length / 11, 0);
     const indexCount = geometries.reduce((count, geometry) => count + (geometry.indices?.length ?? geometry.vertices.length / 11), 0);
@@ -2492,8 +3342,12 @@ var MeshBuilder = class _MeshBuilder {
       if (!Number.isSafeInteger(part) || part < 0 || part >= geometry.partCount) throw new RangeError("Mesh part index outside partCount");
     }
     const vertices = new Float32Array(vertexCount * 11), indices = new Uint16Array(indexCount);
+    const expressionNames = new Set(geometries.flatMap((geometry) => Object.keys(geometry.expressionIndices ?? {})));
+    const expressionIndices = /* @__PURE__ */ Object.create(null);
     const partCount = geometries.reduce((count, geometry) => count + geometry.partCount, 0);
     const morphCount = Math.max(...geometries.map((geometry) => geometry.morphCount));
+    const nonScalingStroke = geometries.some((geometry) => geometry.nonScalingStroke === true);
+    if (nonScalingStroke && morphCount) throw new TypeError("Non-scaling strokes cannot be combined with vertex morph targets");
     let offset = 0;
     let partOffset = 0;
     let indexOffset = 0;
@@ -2511,9 +3365,567 @@ var MeshBuilder = class _MeshBuilder {
       offset += vertexLength;
       partOffset += geometry.partCount;
     }
-    return Object.freeze({ vertices, indices, count: indices.length, strideFloats: 11, partCount, morphCount });
+    for (const name of expressionNames) {
+      const variantLength = geometries.reduce((count, geometry) => count + (geometry.expressionIndices?.[name]?.length ?? (geometry.indices?.length ?? geometry.vertices.length / 11)), 0);
+      const variant = new Uint16Array(variantLength);
+      let target = 0, vertexOffset = 0;
+      for (const geometry of geometries) {
+        const source = geometry.expressionIndices?.[name] ?? baseIndices(geometry);
+        for (let i = 0; i < source.length; i++) variant[target + i] = source[i] + vertexOffset;
+        target += source.length;
+        vertexOffset += geometry.vertices.length / 11;
+      }
+      expressionIndices[name] = variant;
+    }
+    return Object.freeze({
+      vertices,
+      indices,
+      count: indices.length,
+      strideFloats: 11,
+      partCount,
+      morphCount,
+      ...expressionNames.size ? { expressionIndices } : {},
+      ...nonScalingStroke ? { nonScalingStroke: true } : {}
+    });
   }
 };
+
+// modules/rendering/yarn-shader.js
+var STRIDE_FLOATS = 9;
+var STRIDE_BYTES = STRIDE_FLOATS * 4;
+var MAX_SURFACES = 512;
+var DEFAULT_LIMIT_BYTES = 32 * 1024 * 1024;
+var ATTRIBUTES2 = [
+  { name: "a_position", size: 2, offset: 0 },
+  { name: "a_color", size: 4, offset: 8 },
+  { name: "a_surface", size: 3, offset: 24 }
+];
+var IDENTITY4 = Object.freeze([1, 0, 0, 1, 0, 0]);
+var WHITE4 = Object.freeze([1, 1, 1, 1]);
+var VERTEX2 = `
+attribute vec2 a_position;
+attribute vec4 a_color;
+attribute vec3 a_surface;
+uniform mat3 u_projection;
+uniform mat3 u_transform;
+uniform float u_depth;
+varying vec2 v_position;
+varying vec2 v_world;
+varying vec4 v_color;
+varying vec3 v_surface;
+void main() {
+  vec3 world = u_transform * vec3(a_position, 1.0);
+  vec3 projected = u_projection * world;
+  gl_Position = vec4(projected.xy, u_depth * projected.z, projected.z);
+  v_position = a_position;
+  v_world = world.xy / world.z;
+  v_color = a_color;
+  v_surface = a_surface;
+}`;
+function fragment2(kind, maxClipPlanes) {
+  const clips = maxClipPlanes ? `
+uniform vec3 u_planes[${maxClipPlanes}];
+void clipWorld() {
+  for (int i = 0; i < ${maxClipPlanes}; i++) {
+    vec3 plane = u_planes[i];
+    if (dot(plane.xy, plane.xy) > 0.0000001 && dot(plane, vec3(v_world, 1.0)) < 0.0) discard;
+  }
+}` : "void clipWorld() {}";
+  const body = kind === "yarn" ? yarnFragmentBody : sketchFragmentBody;
+  return `precision mediump float;
+varying vec2 v_position; varying vec2 v_world; varying vec4 v_color; varying vec3 v_surface;
+uniform vec4 u_bounds; uniform vec4 u_effect0; uniform vec4 u_effect1; uniform vec4 u_effect2; uniform vec4 u_effect3;
+uniform vec4 u_tint; uniform float u_flash;
+${kind === "sketch" ? "uniform float u_timeMs;" : ""}
+${clips}
+float hashCell(vec2 cell, float salt) {
+  return fract(sin(dot(cell, vec2(127.1, 311.7)) + u_effect0.x * 74.7 + salt * 19.19) * 43758.5453);
+}
+float segmentDistance(vec2 p, vec2 a, vec2 b) {
+  vec2 delta = b - a;
+  float denom = max(dot(delta, delta), 0.000001);
+  float t = clamp(dot(p - a, delta) / denom, 0.0, 1.0);
+  return length(p - (a + delta * t));
+}
+vec2 cubicPoint(float t, vec2 a, vec2 b, vec2 c, vec2 d) {
+  float s = 1.0 - t;
+  return s*s*s*a + 3.0*s*s*t*b + 3.0*s*t*t*c + t*t*t*d;
+}
+float cubicDistance(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d) {
+  float result = 100000.0;
+  vec2 previous = a;
+  for (int i = 1; i <= 5; i++) {
+    vec2 next = cubicPoint(float(i) * 0.2, a, b, c, d);
+    result = min(result, segmentDistance(p, previous, next));
+    previous = next;
+  }
+  return result;
+}
+float lineMask(float distanceToLine, float width) {
+  float aa = max(width * 0.16, 0.025);
+  return 1.0 - smoothstep(max(0.0, width * 0.5 - aa), width * 0.5 + aa, distanceToLine);
+}
+vec3 tintTo(vec3 base, float amount) {
+  return amount < 0.0 ? mix(base, vec3(0.0), -amount) : mix(base, vec3(1.0), amount);
+}
+${body}
+void main() {
+  clipWorld();
+  float alpha = v_color.a * u_tint.a;
+  if (alpha <= 0.0001) discard;
+  vec3 base = mix(v_color.rgb * u_tint.rgb, vec3(1.0), clamp(u_flash, 0.0, 1.0));
+  vec3 rgb = base;
+  float effect = v_surface.x;
+  if (effect < 0.5) {
+    ${kind === "yarn" ? "rgb = shadeYarnFill(rgb);" : "rgb = shadeSketchFill(rgb);"}
+    gl_FragColor = vec4(rgb * alpha, alpha);
+    return;
+  }
+  ${kind === "yarn" ? "shadeYarnEdge(rgb, alpha);" : "shadeSketchEdge(rgb, alpha);"}
+}`;
+}
+var yarnFragmentBody = `
+vec3 shadeYarnFill(vec3 base) {
+  float stitchWidth = abs(u_effect0.y), stitchHeight = u_effect0.z;
+  if (u_effect0.w < 0.0 || stitchWidth <= 0.0 || stitchHeight <= 0.0) return base;
+  float cols = max(2.0, ceil(u_bounds.z / stitchWidth));
+  float rows = max(2.0, ceil(u_bounds.w / stitchHeight));
+  float sx = u_bounds.z / cols, sy = u_bounds.w / rows;
+  vec2 local = v_position;
+  if (u_effect3.z > 0.5) {
+    float rx = max(u_bounds.z * 0.5, 0.0001), ry = max(u_bounds.w * 0.5, 0.0001);
+    float nx = clamp((local.x - (u_bounds.x + rx)) / rx, -1.35, 1.35);
+    float ny = (local.y - (u_bounds.y + ry)) / ry;
+    local.x += (sin(nx * 1.1) / 0.89120736 - nx) * rx;
+    local.y += ry * 0.13 * nx * nx * (1.0 - ny * 0.24);
+  }
+  vec2 cell = (local - u_bounds.xy) / vec2(sx, sy);
+  vec2 index = floor(cell);
+  float jitterX = (hashCell(index, 71.0) - 0.5) * u_effect1.x;
+  float jitterY = (hashCell(index, 39.0) - 0.5) * u_effect1.x;
+  float scaleX = 1.0 + (hashCell(index, 57.0) - 0.5) * u_effect1.x;
+  float scaleY = 1.0 + (hashCell(index, 91.0) - 0.5) * u_effect1.x;
+  vec2 p = (fract(cell) - vec2(0.5 + jitterX, 0.5 + jitterY)) / vec2(scaleX, scaleY);
+  p *= vec2(sx, sy);
+  float stroke = min(sx, sy) * (abs(u_effect0.w) / stitchHeight);
+  float underDistance = cubicDistance(p-vec2(0.0,stroke*0.06), vec2(-0.48,-0.46)*vec2(sx,sy), vec2(-0.22,-0.57)*vec2(sx,sy), vec2(0.22,-0.57)*vec2(sx,sy), vec2(0.48,-0.46)*vec2(sx,sy));
+  vec2 leftA=vec2(-0.34,-0.36)*vec2(sx,sy), leftB=vec2(-0.32,-0.06)*vec2(sx,sy), leftC=vec2(-0.18,0.17)*vec2(sx,sy), leftD=vec2(-0.025,0.34)*vec2(sx,sy);
+  vec2 rightA=vec2(0.34,-0.36)*vec2(sx,sy), rightB=vec2(0.32,-0.06)*vec2(sx,sy), rightC=vec2(0.18,0.17)*vec2(sx,sy), rightD=vec2(0.025,0.34)*vec2(sx,sy);
+  float leftDistance = cubicDistance(p,leftA,leftB,leftC,leftD);
+  float rightDistance = cubicDistance(p,rightA,rightB,rightC,rightD);
+  float under = lineMask(underDistance, stroke*0.5) * 0.5;
+  float grooveLeft = cubicDistance(p-vec2(0.0,stroke*0.06),leftA,leftB,leftC,leftD);
+  float grooveRight = cubicDistance(p-vec2(0.0,stroke*0.06),rightA,rightB,rightC,rightD);
+  float groove = max(lineMask(grooveLeft,stroke*1.08),lineMask(grooveRight,stroke*1.08))*0.85;
+  float yarn = max(lineMask(leftDistance,stroke*0.89),lineMask(rightDistance,stroke*0.89));
+  float lightLeft = cubicDistance(p+vec2(stroke*0.14,stroke*0.13),leftA,leftB,leftC,leftD);
+  float lightRight = cubicDistance(p+vec2(stroke*0.14,stroke*0.13),rightA,rightB,rightC,rightD);
+  float light = max(lineMask(lightLeft,stroke*0.34),lineMask(lightRight,stroke*0.34))*0.57;
+  float twist = 0.0;
+  if (mod(index.x + index.y, 2.0) < 1.0) {
+    float a = segmentDistance(p,vec2(-0.32,-0.12)*vec2(sx,sy),vec2(-0.16,-0.13)*vec2(sx,sy));
+    float b = segmentDistance(p,vec2(0.22,0.18)*vec2(sx,sy),vec2(0.37,0.08)*vec2(sx,sy));
+    twist = max(lineMask(a,stroke*0.075),lineMask(b,stroke*0.075))*0.5;
+  }
+  vec3 dark = tintTo(base,-0.28), grooveColor = tintTo(base,-u_effect1.y);
+  vec3 yarnColor = tintTo(base,0.10), highlight = tintTo(base,0.38);
+  vec3 color = mix(base,dark,under);
+  color = mix(color,grooveColor,groove);
+  color = mix(color,yarnColor,yarn);
+  color = mix(color,highlight,max(light*0.57,twist));
+  return color;
+}
+void shadeYarnEdge(inout vec3 rgb, float alpha) {
+  float radial = v_surface.z;
+  float along = v_surface.y * u_effect3.y;
+  float edgeWidth = u_effect1.w;
+  float lobe = fract(along / max(u_effect1.z, 0.001));
+  float relief = min(u_effect3.w, edgeWidth * 0.75);
+  float wave = sin(lobe * 6.2831853) * relief * 0.35;
+  float seam = lineMask(abs(radial - wave),edgeWidth*0.56);
+  float seamDark = lineMask(abs(radial - wave - edgeWidth*0.06),edgeWidth*0.8)*0.7;
+  float seamLight = lineMask(abs(radial - wave + edgeWidth*0.09),edgeWidth*0.17)*0.55;
+  float spacing = max(u_effect2.x,0.001);
+  float fiberIndex = floor(along / spacing);
+  float jitter = hashCell(vec2(fiberIndex,0.0),22.0);
+  float start = spacing * (fiberIndex + 0.22 + jitter * 0.48);
+  float randomLength = 0.45 + hashCell(vec2(fiberIndex,0.0),5.0) * 0.95;
+  float lengthLimit = min(u_effect2.y,max(u_bounds.z,u_bounds.w)*0.12)*randomLength;
+  float lean = (hashCell(vec2(fiberIndex,0.0),14.0)-0.5)*lengthLimit*1.5;
+  float alongDistance = abs(along - start - lean * clamp(radial/max(lengthLimit,0.001),0.0,1.0));
+  float fiber = 0.0;
+  if (u_effect3.x > 0.0 && fiberIndex < u_effect3.x && radial >= 0.0 && radial <= lengthLimit) {
+    fiber = lineMask(alongDistance,u_effect2.z);
+  }
+  float coverage = max(max(seam,seamDark*0.6),max(seamLight,fiber*u_effect2.w));
+  if (coverage < 0.012) discard;
+  vec3 dark=tintTo(rgb,-0.28), yarn=tintTo(rgb,0.10), light=tintTo(rgb,0.38);
+  rgb=mix(rgb,dark,seamDark*0.7);
+  rgb=mix(rgb,yarn,seam);
+  rgb=mix(rgb,light,max(seamLight,fiber*0.7));
+  float outAlpha=alpha*coverage;
+  gl_FragColor=vec4(rgb*outAlpha,outAlpha);
+}`;
+var sketchFragmentBody = `
+vec3 shadeSketchFill(vec3 base) {
+  float angle=u_effect1.z, spacing=max(u_effect1.w,0.001);
+  vec2 direction=vec2(cos(angle),sin(angle));
+  float phase=dot(v_position,direction)/spacing + hashCell(vec2(u_effect0.x,0.0),31.0);
+  float distanceToHatch=abs(fract(phase)-0.5)*spacing;
+  float hatch=lineMask(distanceToHatch,u_effect2.x)*u_effect2.y;
+  return mix(base,tintTo(base,-0.48),hatch);
+}
+void shadeSketchEdge(inout vec3 rgb, float alpha) {
+  float phase=mod(u_timeMs,max(u_effect0.y,16.0))/max(u_effect0.y,16.0)*6.2831853;
+  float wobble=sin(v_surface.y*u_effect0.z*6.2831853+phase+u_effect0.x)*u_effect1.x;
+  float offset=(u_effect1.y+wobble);
+  float echo=lineMask(abs(v_surface.z-offset),u_effect1.z)*u_effect1.w;
+  if(echo<0.012)discard;
+  rgb=mix(rgb,tintTo(rgb,-0.52),echo);
+  float outAlpha=alpha*echo;
+  gl_FragColor=vec4(rgb*outAlpha,outAlpha);
+}`;
+function finiteArray3(value, count, name) {
+  if (!value || value.length !== count || Array.from(value).some((number) => !Number.isFinite(number))) throw new TypeError(`${name} needs ${count} finite numbers`);
+}
+function validateStyle(style) {
+  if (!style || typeof style !== "object" || Array.isArray(style)) throw new TypeError("A complete SVG-authored yarn or sketch style is required");
+  const yarnRequired = ["seed", "stitchWidth", "stitchHeight", "thickness", "irregularity", "contrast", "edgeSpacing", "edgeRelief", "edgeWidth", "fiberLength", "fiberWidth", "fiberOpacity", "fiberMax"];
+  const sketchRequired = ["seed", "periodMs", "amplitude", "frequency", "echoX", "echoY", "echoWidth", "echoOpacity", "hatchAngle", "hatchSpacing", "hatchWidth", "hatchOpacity"];
+  const fields = style.kind === "yarn" ? yarnRequired : style.kind === "sketch" ? sketchRequired : null;
+  if (!fields || fields.some((key) => !Number.isFinite(style[key]))) throw new TypeError("Unsupported or incomplete SVG surface style");
+  if (style.seed < 0 || style.seed > 2147483647 || !Number.isSafeInteger(style.seed)) throw new RangeError("Surface seed must be a nonnegative 31-bit integer");
+  if (style.kind === "yarn") {
+    for (const key of ["stitchWidth", "stitchHeight", "thickness", "edgeSpacing", "edgeRelief", "edgeWidth", "fiberLength", "fiberWidth"]) if (style[key] <= 0) throw new RangeError(`Yarn ${key} must be positive`);
+    for (const key of ["irregularity", "contrast", "fiberOpacity"]) if (style[key] < 0 || style[key] > 1) throw new RangeError(`Yarn ${key} must be in [0,1]`);
+    if (!Number.isSafeInteger(style.fiberMax) || style.fiberMax < 0 || style.fiberMax > 512) throw new RangeError("Yarn fiberMax must be an integer from 0 to 512");
+    for (const key of ["fiberSpacing", "curved", "pattern", "detail", "fiber"]) if (style[key] !== void 0 && (key === "fiberSpacing" ? !Number.isFinite(style[key]) || style[key] <= 0 : typeof style[key] !== "boolean")) throw new TypeError(`Invalid Yarn ${key}`);
+  } else {
+    if (!Number.isSafeInteger(style.periodMs) || style.periodMs < 16 || style.periodMs > 1e4) throw new RangeError("Sketch periodMs must be 16..10000");
+    for (const key of ["amplitude", "frequency", "echoWidth", "hatchSpacing", "hatchWidth"]) if (style[key] <= 0) throw new RangeError(`Sketch ${key} must be positive`);
+    for (const key of ["echoOpacity", "hatchOpacity"]) if (style[key] < 0 || style[key] > 1) throw new RangeError(`Sketch ${key} must be in [0,1]`);
+  }
+}
+function normalizeOutline(outline) {
+  if (!(outline instanceof Float32Array || Array.isArray(outline)) || outline.length < 8 || outline.length % 2) throw new TypeError("Closed SVG contour must contain at least four x/y points");
+  const points = [];
+  for (let i = 0; i < outline.length; i += 2) {
+    const x = outline[i], y = outline[i + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new TypeError("SVG contour points must be finite");
+    if (!points.length || Math.hypot(x - points.at(-1)[0], y - points.at(-1)[1]) > 1e-6) points.push([x, y]);
+  }
+  if (points.length > 4 && Math.hypot(points[0][0] - points.at(-1)[0], points[0][1] - points.at(-1)[1]) < 1e-6) points.pop();
+  if (points.length < 3) throw new TypeError("SVG contour requires at least three distinct points");
+  return points;
+}
+function surfaceGeometry(fillVertices, outline, edgeColors, style) {
+  if (!(fillVertices instanceof Float32Array) || fillVertices.length < 18 || fillVertices.length % 18) throw new TypeError("Filled surface requires complete triangles in a six-float position/color layout");
+  const points = normalizeOutline(outline);
+  if (edgeColors !== void 0 && (!(edgeColors instanceof Float32Array) || edgeColors.length !== points.length * 4)) throw new TypeError("edgeColors must contain one RGBA color per contour point");
+  if (edgeColors && edgeColors.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) throw new RangeError("edgeColors must contain finite RGBA values in [0,1]");
+  for (let i = 0; i < fillVertices.length; i++) {
+    if (!Number.isFinite(fillVertices[i])) throw new TypeError("Filled surface vertices must be finite");
+    const field = i % 6;
+    if (field >= 2 && (fillVertices[i] < 0 || fillVertices[i] > 1)) throw new RangeError("Surface colors must be in [0,1]");
+  }
+  const lengths = [], normals = [];
+  let total = 0, signedArea = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length], dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    if (!length) throw new TypeError("SVG contour cannot contain zero-length edges");
+    lengths.push(length);
+    total += length;
+    signedArea += a[0] * b[1] - b[0] * a[1];
+    normals.push([dy / length, -dx / length]);
+  }
+  if (Math.abs(signedArea) < 1e-6) throw new TypeError("SVG contour cannot have zero area");
+  const winding = signedArea >= 0 ? 1 : -1;
+  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < fillVertices.length; i += 6) {
+    bounds[0] = Math.min(bounds[0], fillVertices[i]);
+    bounds[1] = Math.min(bounds[1], fillVertices[i + 1]);
+    bounds[2] = Math.max(bounds[2], fillVertices[i]);
+    bounds[3] = Math.max(bounds[3], fillVertices[i + 1]);
+  }
+  if (!(bounds[2] > bounds[0] && bounds[3] > bounds[1])) throw new TypeError("Filled surface bounds must have positive area");
+  const rgba2 = edgeColors ? edgeColors : (() => {
+    const color2 = [0, 0, 0, 0];
+    for (let i = 0; i < fillVertices.length; i += 6) for (let c = 0; c < 4; c++) color2[c] += fillVertices[i + 2 + c];
+    for (let c = 0; c < 4; c++) color2[c] /= fillVertices.length / 6;
+    return Float32Array.from(points.flatMap(() => color2));
+  })();
+  const edgeWidth = style.kind === "yarn" ? style.edgeWidth : Math.max(style.echoWidth, Math.hypot(style.echoX, style.echoY) + style.amplitude + style.echoWidth);
+  const fiberLength = style.kind === "yarn" && style.fiber !== false ? style.fiberLength : edgeWidth;
+  const fillRecords = new Float32Array(fillVertices.length / 6 * STRIDE_FLOATS);
+  let write = 0;
+  for (let i = 0; i < fillVertices.length; i += 6) {
+    fillRecords.set(fillVertices.subarray(i, i + 6), write);
+    fillRecords[write + 6] = 0;
+    write += STRIDE_FLOATS;
+  }
+  const cumulative = [0];
+  for (const length of lengths) cumulative.push(cumulative.at(-1) + length);
+  const ring = [];
+  for (let i = 0; i < points.length; i++) {
+    const previous = normals[(i + points.length - 1) % points.length], current = normals[i];
+    let mx = (previous[0] + current[0]) * winding, my = (previous[1] + current[1]) * winding;
+    const miterLength = Math.hypot(mx, my);
+    if (miterLength < 1e-5) {
+      mx = current[0] * winding;
+      my = current[1] * winding;
+    } else {
+      mx /= miterLength;
+      my /= miterLength;
+    }
+    const denominator = Math.max(0.25, Math.abs(mx * current[0] * winding + my * current[1] * winding));
+    const scale = Math.min(4, 1 / denominator);
+    ring.push([mx * scale, my * scale]);
+  }
+  const edgeFirst = fillVertices.length / 6;
+  const edgeRecords = [];
+  const colorAt = (index) => rgba2.subarray(index * 4, index * 4 + 4);
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    const emit = (pointIndex, distance) => {
+      const point2 = points[pointIndex], normal = ring[pointIndex], x = point2[0] + normal[0] * distance, y = point2[1] + normal[1] * distance;
+      edgeRecords.push(x, y, ...colorAt(pointIndex), 1, cumulative[pointIndex] / total, distance);
+    };
+    emit(i, -edgeWidth);
+    emit(i, fiberLength);
+    emit(j, fiberLength);
+    emit(i, -edgeWidth);
+    emit(j, fiberLength);
+    emit(j, -edgeWidth);
+  }
+  const edgeRecordArray = Float32Array.from(edgeRecords);
+  const vertices = new Float32Array(fillRecords.length + edgeRecordArray.length);
+  vertices.set(fillRecords);
+  vertices.set(edgeRecordArray, fillRecords.length);
+  return Object.freeze({
+    vertices,
+    fillFirst: 0,
+    fillCount: fillVertices.length / 6,
+    edgeFirst: fillVertices.length / 6,
+    edgeCount: edgeRecordArray.length / STRIDE_FLOATS,
+    edgeByteOffset: fillRecords.length * 4,
+    bounds: Float32Array.of(bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]),
+    contourLength: total
+  });
+}
+function clipPlanes(clips, maxPlanes) {
+  const packed = new Float32Array(maxPlanes * 3);
+  if (!clips?.length) return packed;
+  if (!Array.isArray(clips)) throw new TypeError("clips must be an array of convex polygons");
+  let cursor = 0;
+  for (const polygon of clips) {
+    if (!Array.isArray(polygon) || polygon.length < 3 || polygon.some((point2) => !Number.isFinite(point2?.x) || !Number.isFinite(point2?.y))) throw new TypeError("Finite convex clip polygons required");
+    let area = 0;
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+      area += a.x * b.y - b.x * a.y;
+    }
+    if (Math.abs(area) < 1e-8) throw new RangeError("A clip polygon must have nonzero area");
+    const sign = area >= 0 ? 1 : -1;
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % polygon.length], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+      if (!length) continue;
+      if (cursor >= maxPlanes) throw new RangeError(`Shader surface clipping exceeds the device limit of ${maxPlanes} edge planes`);
+      const at = cursor++ * 3, nx = -dy / length * sign, ny = dx / length * sign;
+      packed[at] = nx;
+      packed[at + 1] = ny;
+      packed[at + 2] = -(nx * a.x + ny * a.y);
+    }
+  }
+  return packed;
+}
+function toMatrix3(matrix) {
+  finiteArray3(matrix, 6, "transform");
+  return Float32Array.of(matrix[0], matrix[1], 0, matrix[2], matrix[3], 0, matrix[4], matrix[5], 1);
+}
+var YarnSurfaceRenderer = class {
+  constructor(device, { maxSurfaces = MAX_SURFACES, maxSurfaceBytes = DEFAULT_LIMIT_BYTES } = {}) {
+    if (!device?.createPipeline || !device?.uploadVertices || !device?.draw) throw new TypeError("A ready GameKit WebGLDevice is required");
+    if (!Number.isSafeInteger(maxSurfaces) || maxSurfaces < 1 || maxSurfaces > MAX_SURFACES) throw new RangeError(`maxSurfaces must be 1..${MAX_SURFACES}`);
+    if (!Number.isSafeInteger(maxSurfaceBytes) || maxSurfaceBytes < STRIDE_BYTES * 3 || maxSurfaceBytes > device.maxBufferBytes) throw new RangeError("maxSurfaceBytes must fit the device buffer limit");
+    this.device = device;
+    this.maxSurfaces = maxSurfaces;
+    this.maxSurfaceBytes = maxSurfaceBytes;
+    this.maxClipPlanes = Math.max(1, Math.min(8, device.gl.getParameter(device.gl.MAX_FRAGMENT_UNIFORM_VECTORS) - 8));
+    this.surfaces = /* @__PURE__ */ new Set();
+    this.bytes = 0;
+    this.pipelines = /* @__PURE__ */ new Map();
+    this.state = "ready";
+    this.failure = null;
+    this.disposed = false;
+    this.onLost = () => {
+      this.state = "lost";
+    };
+    this.onRestored = () => {
+      try {
+        for (const surface of this.surfaces) device.uploadVertices(surface.buffer, surface.vertices);
+        this.state = "ready";
+        this.failure = null;
+      } catch (error) {
+        this.state = "failed";
+        this.failure = error.message;
+      }
+    };
+    device.canvas.addEventListener("webglcontextlost", this.onLost);
+    device.canvas.addEventListener("webglcontextrestored", this.onRestored);
+  }
+  _pipeline(kind) {
+    let pipeline = this.pipelines.get(kind);
+    if (pipeline) return pipeline;
+    const uniforms = {
+      u_projection: "matrix3fv",
+      u_transform: "matrix3fv",
+      u_depth: "1f",
+      u_bounds: "4f",
+      u_effect0: "4f",
+      u_effect1: "4f",
+      u_effect2: "4f",
+      u_effect3: "4f",
+      u_tint: "4f",
+      u_flash: "1f",
+      "u_planes[0]": "3fv",
+      ...kind === "sketch" ? { u_timeMs: "1f" } : {}
+    };
+    pipeline = this.device.createPipeline({
+      vertex: VERTEX2,
+      fragment: fragment2(kind, this.maxClipPlanes),
+      stride: STRIDE_BYTES,
+      attributes: ATTRIBUTES2,
+      uniforms
+    });
+    this.pipelines.set(kind, pipeline);
+    return pipeline;
+  }
+  createSurface({ fillVertices, outline, edgeColors, style }) {
+    if (this.disposed || this.state !== "ready") throw new Error(`YarnSurfaceRenderer is ${this.state}`);
+    validateStyle(style);
+    if (this.surfaces.size >= this.maxSurfaces) throw new RangeError("Retained yarn surface count limit exceeded");
+    const geometry = surfaceGeometry(fillVertices, outline, edgeColors, style);
+    const vertices = geometry.vertices.slice();
+    if (this.bytes + vertices.byteLength > this.maxSurfaceBytes) throw new RangeError("Retained yarn surface byte budget exceeded");
+    const pipeline = this._pipeline(style.kind);
+    const buffer = this.device.createVertexBuffer({ capacityBytes: vertices.byteLength });
+    try {
+      this.device.uploadVertices(buffer, vertices);
+    } catch (error) {
+      this.device.deleteVertexBuffer(buffer);
+      throw error;
+    }
+    const surface = Object.freeze({
+      renderer: this,
+      buffer,
+      vertices,
+      byteLength: vertices.byteLength,
+      style: Object.freeze({ ...style }),
+      kind: style.kind,
+      fillFirst: geometry.fillFirst,
+      fillCount: geometry.fillCount,
+      edgeFirst: geometry.edgeFirst,
+      edgeCount: geometry.edgeCount,
+      edgeByteOffset: geometry.edgeByteOffset,
+      bounds: geometry.bounds,
+      contourLength: geometry.contourLength,
+      pipeline
+    });
+    this.surfaces.add(surface);
+    this.bytes += surface.byteLength;
+    return surface;
+  }
+  drawSurface(surface, {
+    projection,
+    transform = IDENTITY4,
+    color: color2 = WHITE4,
+    alpha = 1,
+    whiteFlash = 0,
+    timeMs = 0,
+    clips = [],
+    stencilRef = null,
+    z = 0,
+    depth = false,
+    blend = "source-over"
+  } = {}) {
+    if (this.disposed || this.state !== "ready") throw new Error(`YarnSurfaceRenderer is ${this.state}${this.failure ? ": " + this.failure : ""}`);
+    if (!this.surfaces.has(surface)) throw new TypeError("Surface must belong to this YarnSurfaceRenderer");
+    finiteArray3(projection, 9, "projection");
+    finiteArray3(color2, 4, "color");
+    if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || color2.some((value) => value < 0 || value > 1)) throw new RangeError("Surface tint/alpha must be in [0,1]");
+    if (!Number.isFinite(whiteFlash) || whiteFlash < 0 || whiteFlash > 1) throw new RangeError("whiteFlash must be in [0,1]");
+    if (!Number.isFinite(timeMs)) throw new TypeError("timeMs must be finite");
+    if (!Number.isFinite(z) || z < -1 || z > 1) throw new RangeError("z must be in [-1,1]");
+    if (stencilRef !== null && (!Number.isSafeInteger(stencilRef) || stencilRef < 0 || stencilRef > 255)) throw new RangeError("stencilRef must be null or in [0,255]");
+    if (stencilRef !== null && !this.device.activeStencilAvailable) throw new Error("A stencil-tested yarn surface requires an active stencil attachment");
+    const planes = clipPlanes(clips, this.maxClipPlanes), style = surface.style;
+    const yarn = surface.kind === "yarn";
+    const stitchPattern = style.pattern !== false;
+    const effect0 = yarn ? [style.seed, style.stitchWidth, style.stitchHeight, (stitchPattern ? 1 : -1) * style.thickness] : [style.seed, style.periodMs, style.frequency, 0];
+    const effect1 = yarn ? [style.irregularity, style.contrast, style.edgeSpacing, style.edgeWidth] : [style.amplitude, style.echoX, style.echoWidth, style.echoOpacity];
+    const effect2 = yarn ? [style.fiberSpacing ?? 4, style.fiberLength, style.fiberWidth, style.fiberOpacity] : [style.hatchWidth, style.hatchOpacity, style.hatchAngle, style.hatchSpacing];
+    const effect3 = yarn ? [
+      style.fiber === false ? 0 : style.fiberMax,
+      surface.contourLength,
+      style.curved === false ? 0 : 1,
+      style.edgeRelief * (style.detail ? 0.3 : 1)
+    ] : [0, style.echoY, 0, 0];
+    const uniforms = {
+      u_projection: projection,
+      u_transform: toMatrix3(transform),
+      u_depth: z,
+      u_bounds: surface.bounds,
+      u_effect0: effect0,
+      u_effect1: effect1,
+      u_effect2: effect2,
+      u_effect3: effect3,
+      u_tint: [color2[0], color2[1], color2[2], color2[3] * alpha],
+      u_flash: whiteFlash,
+      "u_planes[0]": planes,
+      ...yarn ? {} : { u_timeMs: (timeMs % style.periodMs + style.periodMs) % style.periodMs }
+    };
+    const common = {
+      pipeline: surface.pipeline,
+      buffer: surface.buffer,
+      uniforms,
+      blend,
+      depth,
+      stencil: stencilRef === null ? false : { func: "equal", ref: stencilRef, mask: 255, writeMask: 0, pass: "keep" }
+    };
+    this.device.draw({ ...common, first: surface.fillFirst, count: surface.fillCount });
+    if (surface.edgeCount) {
+      const edgeDepth = depth === true ? { test: true, write: false } : depth && typeof depth === "object" ? { ...depth, write: false } : depth;
+      this.device.draw({ ...common, first: surface.edgeFirst, count: surface.edgeCount, depth: edgeDepth });
+    }
+  }
+  deleteSurface(surface) {
+    if (!this.surfaces.has(surface)) return false;
+    this.device.deleteVertexBuffer(surface.buffer);
+    this.surfaces.delete(surface);
+    this.bytes -= surface.byteLength;
+    return true;
+  }
+  stats() {
+    return Object.freeze({ state: this.state, surfaceCount: this.surfaces.size, retainedBytes: this.bytes, pipelineCount: this.pipelines.size, maxClipPlanes: this.maxClipPlanes });
+  }
+  dispose() {
+    if (this.disposed) return false;
+    this.device.canvas.removeEventListener("webglcontextlost", this.onLost);
+    this.device.canvas.removeEventListener("webglcontextrestored", this.onRestored);
+    for (const surface of this.surfaces) this.device.deleteVertexBuffer(surface.buffer);
+    for (const pipeline of this.pipelines.values()) this.device.deletePipeline(pipeline);
+    this.surfaces.clear();
+    this.pipelines.clear();
+    this.bytes = 0;
+    this.disposed = true;
+    this.state = "disposed";
+    return true;
+  }
+};
+function buildYarnSurfaceGeometry(options) {
+  validateStyle(options?.style);
+  return surfaceGeometry(options.fillVertices, options.outline, options.edgeColors, options.style);
+}
 
 // modules/rendering/glyph-atlas.js
 var GlyphAtlas = class {
@@ -3007,9 +4419,9 @@ var FontAssetLoader = class {
 };
 
 // modules/rendering/index.js
-var WHITE4 = Object.freeze([1, 1, 1, 1]);
+var WHITE5 = Object.freeze([1, 1, 1, 1]);
 var CLEAR = Object.freeze([0, 0, 0, 0]);
-var VERTEX2 = `
+var VERTEX3 = `
 attribute vec2 a_position;
 attribute vec2 a_uv;
 attribute vec4 a_color;
@@ -3124,19 +4536,19 @@ var Renderer2D = class {
   }
   _initialize() {
     const gl = this.gl;
-    let vertex, fragment2;
+    let vertex, fragment3;
     try {
-      vertex = compile2(gl, gl.VERTEX_SHADER, VERTEX2);
-      fragment2 = compile2(gl, gl.FRAGMENT_SHADER, FRAGMENT2);
+      vertex = compile2(gl, gl.VERTEX_SHADER, VERTEX3);
+      fragment3 = compile2(gl, gl.FRAGMENT_SHADER, FRAGMENT2);
       this.program = gl.createProgram();
       if (!this.program) throw new Error("WebGL program allocation failed");
       gl.attachShader(this.program, vertex);
-      gl.attachShader(this.program, fragment2);
+      gl.attachShader(this.program, fragment3);
       gl.linkProgram(this.program);
       if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(`WebGL link: ${gl.getProgramInfoLog(this.program)}`);
     } finally {
       if (vertex) gl.deleteShader(vertex);
-      if (fragment2) gl.deleteShader(fragment2);
+      if (fragment3) gl.deleteShader(fragment3);
     }
     this.buffer = gl.createBuffer();
     if (!this.buffer) throw new Error("WebGL buffer allocation failed");
@@ -3358,7 +4770,7 @@ var Renderer2D = class {
     data[i++] = tint[2];
     data[i] = tint[3];
   }
-  triangle(x0, y0, x1, y1, x2, y2, tint = WHITE4) {
+  triangle(x0, y0, x1, y1, x2, y2, tint = WHITE5) {
     finite4(x0, "x0");
     finite4(y0, "y0");
     finite4(x1, "x1");
@@ -3392,18 +4804,18 @@ var Renderer2D = class {
     this._vertex(dx, dy, u0, v1, tint);
   }
   /** Center-anchored rectangle, positive size, clockwise rotation in y-down world. */
-  rect(x, y, width, height, tint = WHITE4, angle = 0) {
+  rect(x, y, width, height, tint = WHITE5, angle = 0) {
     this._quad(this.white.texture, x, y, width, height, angle, tint, 0, 0, 1, 1);
   }
   /** Atlas UV edges are top-left based; reversing endpoints flips the image. */
-  sprite(texture, x, y, width = texture.width, height = texture.height, { angle = 0, tint = WHITE4, u0 = 0, v0 = 0, u1 = 1, v1 = 1 } = {}) {
+  sprite(texture, x, y, width = texture.width, height = texture.height, { angle = 0, tint = WHITE5, u0 = 0, v0 = 0, u1 = 1, v1 = 1 } = {}) {
     const record = this.textures.get(texture);
     if (!record) throw new Error("unknown/deleted texture");
     if (!Number.isFinite(u0) || !Number.isFinite(v0) || !Number.isFinite(u1) || !Number.isFinite(v1) || Math.min(u0, v0, u1, v1) < 0 || Math.max(u0, v0, u1, v1) > 1) throw new RangeError("UV must be in [0,1]");
     this._quad(record.texture, x, y, width, height, angle, tint, u0, v0, u1, v1);
   }
   /** Bounded fan tessellation; game chooses quality. No path/tessellation engine. */
-  ellipse(x, y, radiusX, radiusY, tint = WHITE4, segments = 24) {
+  ellipse(x, y, radiusX, radiusY, tint = WHITE5, segments = 24) {
     finite4(x, "x");
     finite4(y, "y");
     positive2(radiusX, "radiusX");
@@ -3418,7 +4830,7 @@ var Renderer2D = class {
       this._vertex(x + Math.cos(b) * radiusX, y + Math.sin(b) * radiusY, 0, 0, tint);
     }
   }
-  line(x0, y0, x1, y1, width, tint = WHITE4) {
+  line(x0, y0, x1, y1, width, tint = WHITE5) {
     finite4(x0, "x0");
     finite4(y0, "y0");
     finite4(x1, "x1");
@@ -3504,5 +4916,7 @@ export {
   Renderer2D,
   VectorContext,
   VectorRenderer,
-  WebGLDevice
+  WebGLDevice,
+  YarnSurfaceRenderer,
+  buildYarnSurfaceGeometry
 };

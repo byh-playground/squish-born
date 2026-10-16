@@ -1,23 +1,23 @@
 {
-  "tag": "v0.6.3",
-  "sourceCommit": "236974f43e1f56c77cc98cbd94e981236af90bf0",
-  "distCommit": "e51471f340ea5e40ddbb70964510b8928696cf6c",
-  "manifestSha256": "b60e231a9a3b583db60346d7fa236b676550a88dda2f245e1d3d541669a0647d",
+  "tag": "v0.10.0",
+  "sourceCommit": "8b84996aef688cae7a2634fd27d50a7ca15d555d",
+  "distCommit": "e9af07d30125b5ffade5aff7b46d266f723eb5f7",
+  "manifestSha256": "e01c8c0dd85ced758cae7aec47835934f8fece404c567fb5fde18775b43eca28",
   "compiledAssetManifestSha256": "41be916dcb9f78de7588d1fc84d728d47b0fe4649e24c007fe608462a63edd23",
   "distManifestPath": "assets/gamekit/manifest.json",
   "modules": [
     {
       "name": "rendering",
       "path": "assets/gamekit/rendering.js",
-      "sha256": "f4408f8b2f7f5d8d4ae2022efac9906e299fb0dca5f2da6b0f73dd0360aae687",
-      "bytes": 165832,
+      "sha256": "fd254f4f8b91ab74dae294abbe3f2d76736648e797ccc370abf35aec8ea41f94",
+      "bytes": 246029,
       "delivery": "local ESM"
     },
     {
       "name": "vector-assets",
       "path": "assets/gamekit/vector-assets.js",
-      "sha256": "73e68b83b3ab7fd259a1f5893c684f89e34bb53cc8a7bc3153646c313841b871",
-      "bytes": 127403,
+      "sha256": "a4a0db5cba7ce4d7ad9cd4d411c72c6e3bfaeabcfebdaad5884ccd693bf2fda3",
+      "bytes": 129641,
       "delivery": "local ESM"
     },
     {
@@ -37,7 +37,7 @@
     "name": "GameKit vector-assets compiler",
     "version": "0.5.0",
     "sourceCommit": "8478ad859fe3cc6fd095032df32806a085bfa1f4",
-    "compilerSha256": "2884f484031a429952375935bf8c79bcd4a6c09732a94a5255701dbd36929ffc",
+    "compilerSha256": "2ef463b0708b6c26ba5880d7708b661c18e79fc41ca7c880e7b821fb8f7ee513",
     "schemaSha256": "7b9060d4a6cbd5c7e32f7923c34fbf232571a804a34211bf60e57ca1261942c8",
     "buildDependencies": {
       "three": "0.186.1",
