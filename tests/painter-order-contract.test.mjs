@@ -44,3 +44,14 @@ test('shader surfaces and authored SVG layer order stay with the GameKit asset p
   assert.match(html, /function multiplyAffine\(a,b\)/);
   assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });
+
+
+test('concave runtime clips use bounded retained GameKit ClipPaths after frame completion', () => {
+  assert.ok(html.includes('function flattenTransformedClip(context)'));
+  assert.ok(html.includes('inverseAffineTransform(context.getTransform())'));
+  assert.ok(html.includes('target.createClipPath(item.points,{rule:item.rule})'));
+  assert.ok(html.includes('target.clipPath(handle)'));
+  assert.ok(html.includes('ctx.flushPendingClipPaths?.()'));
+  assert.ok(html.includes('maxRetainedClipPaths=32'));
+  assert.ok(html.includes('disposeClipPaths'));
+});
