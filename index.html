@@ -147,7 +147,7 @@
 <div class="overlay" id="overlay" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="modalTitle"><div class="modal-content" id="modalContent"></div></section></div>
 <div class="alert" id="toast" role="status" aria-live="polite" hidden></div>
 <script type="module">
-import { WebGLDevice, MeshRenderer, VectorRenderer, VectorContext } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@95d8676e3eaaa9f80aeed2e3361e258381511c77/rendering.js';
+import { WebGLDevice, MeshRenderer, VectorRenderer, VectorContext, YarnSurfaceRenderer } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@95d8676e3eaaa9f80aeed2e3361e258381511c77/rendering.js';
 import { createVectorAsset } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@95d8676e3eaaa9f80aeed2e3361e258381511c77/vector-assets.js';
 import { createVectorAssetLoader } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@95d8676e3eaaa9f80aeed2e3361e258381511c77/vector-assets-loader.js';
 import { createLinearGradient, createRadialGradient } from './assets/gradient-adapter.js';
@@ -164,8 +164,9 @@ const SQUISH_VECTOR_ASSETS = await (async () => {
       const asset=await loader.load(new URL(item.path,document.baseURI).href,{sourcePath:item.path,expectedSha256:item.sha256,maxBytes:512*1024,curveSegments:16,includeSourcePaths:true});
       if(asset.metadata.id!==item.id)throw new Error('Authored SVG id mismatch: '+item.path);
       const authored=asset.metadata.styles?.filter(style=>style.kind==='yarn'||style.kind==='sketch')||[];
+      const shaderSurfaces=asset.geometry.shaderSurfaces??[];
       if(authored.some(style=>style.backend!=='shader'))throw new Error('Authored shader style is missing: '+item.path);
-      if(asset.geometry.shaderSurfaces?.length!==authored.length)throw new Error('GameKit shader surface count mismatch: '+item.path);
+      if(shaderSurfaces.length!==authored.length)throw new Error('GameKit shader surface count mismatch: '+item.path);
       if(authored.length&&asset.geometry.drawOrder?.filter(command=>command.kind==='surface').length!==authored.length)throw new Error('GameKit draw order is incomplete: '+item.path);
       return [item.key,asset];
     }));
@@ -1145,8 +1146,8 @@ class YarnMaterial{
 }
 class SpriteLibrary {
  constructor(compiledAssets=SQUISH_VECTOR_ASSETS){this.compiledAssets=compiledAssets;this.yarn=new YarnMaterial()}
- createRig(meshRenderer,scope='all'){const entries=Object.entries(this.compiledAssets),selected=scope==='field'?entries.filter(([id])=>id!=='hatch-background'&&id!=='knead-skin'):scope==='hatch'?entries.filter(([id])=>id==='hatch-background'||id==='knead-skin'||id.startsWith('unit-')):entries;const rig={meshRenderer,assets:new Map(),players:new Map(),frame:0};for(const [id,compiled] of selected)this.retainAsset(rig,id,compiled);return rig}
- retainAsset(rig,id,compiled){const asset=createVectorAsset(rig.meshRenderer,compiled);rig.assets.set(id,asset);}
+ createRig(meshRenderer,surfaceRenderer,scope='all'){const entries=Object.entries(this.compiledAssets),selected=scope==='field'?entries.filter(([id])=>id!=='hatch-background'&&id!=='knead-skin'):scope==='hatch'?entries.filter(([id])=>id==='hatch-background'||id==='knead-skin'||id.startsWith('unit-')):entries;const rig={meshRenderer,surfaceRenderer,assets:new Map(),players:new Map(),frame:0};for(const [id,compiled] of selected)this.retainAsset(rig,id,compiled);return rig}
+ retainAsset(rig,id,compiled){const asset=createVectorAsset(rig.meshRenderer,compiled,{surfaceRenderer:rig.surfaceRenderer});rig.assets.set(id,asset);}
  beginPass(rig){rig.frame++;if(rig.frame%120===0)for(const [key,record] of rig.players)if(rig.frame-record.lastUsed>240){record.player.dispose();rig.players.delete(key)}}
  unit(type,gold=false,actor=null){return {asset:'unit-'+Config.units[type].id+(gold?'-gold':''),actor}}
  enemy(type,actor=null){return {asset:'enemy-'+Config.enemies[type].id,actor}}
@@ -1193,8 +1194,8 @@ function drawLabel(ctx,text,x,y,options={}){if(!ctx?.queueLabel)throw new TypeEr
 function roundedRect(ctx,x,y,w,h,r,fill,stroke=null){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
 class Renderer{
  constructor(field,hatch,sprites,profile){this.field=field;this.hatch=hatch;this.sprites=sprites;this.profile=profile;this.time=0;this.effects=[];this.touchGuide={active:false,point:null,side:'right'};this.rng=new Rng(1432);this.frames={count:0,total:0,worst:0};this.mapping={field:{},hatch:{}};this.reliefPaths={split:new Path2D()};{const slit=this.reliefPaths.split;slit.moveTo(-1.08,-.08);slit.bezierCurveTo(-.72,-.18,-.38,-.11,.15,-.09);slit.lineTo(.10,.025);slit.quadraticCurveTo(-.55,.07,-1.08,.08);slit.closePath()}this.fieldText=new VectorTextLayer(document.getElementById('fieldText'));this.hatchText=new VectorTextLayer(document.getElementById('hatchText'));this.fieldSystem=this.makeSystem(field,this.fieldText);this.hatchSystem=this.makeSystem(hatch,this.hatchText);this.fieldContext=this.fieldSystem.context;this.hatchContext=this.hatchSystem.context;this.fieldRig=this.fieldSystem.rig;this.hatchRig=this.hatchSystem.rig;this.resize();this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(field);this.observer.observe(hatch);window.addEventListener('pagehide',()=>this.dispose(),{once:true})}
- makeSystem(canvas,textLayer){const device=new WebGLDevice(canvas,{depth:false,stencil:true}),meshes=new MeshRenderer(device),vector=new VectorRenderer(device,{initialVertices:8192,maxVertices:262144}),context=new VectorContext(device,{vectorRenderer:vector});context.meshRenderer=meshes;const rig=this.sprites.createRig(meshes,canvas.id==='field'?'field':'hatch');return {device,meshes,vector,raw:context,rig,context:createVectorContextAdapter(context,textLayer,this.sprites,rig)}}
- dispose(){this.observer?.disconnect();for(const system of [this.fieldSystem,this.hatchSystem])if(system){this.sprites.disposeRig(system.rig);system.raw.dispose();system.vector.dispose();system.device.dispose()}this.fieldText.svg.replaceChildren();this.hatchText.svg.replaceChildren()}
+ makeSystem(canvas,textLayer){const device=new WebGLDevice(canvas,{depth:false,stencil:true}),meshes=new MeshRenderer(device),surfaceRenderer=new YarnSurfaceRenderer(device),vector=new VectorRenderer(device,{initialVertices:8192,maxVertices:262144}),context=new VectorContext(device,{vectorRenderer:vector});context.meshRenderer=meshes;const rig=this.sprites.createRig(meshes,surfaceRenderer,canvas.id==='field'?'field':'hatch');return {device,meshes,surfaceRenderer,vector,raw:context,rig,context:createVectorContextAdapter(context,textLayer,this.sprites,rig)}}
+ dispose(){this.observer?.disconnect();for(const system of [this.fieldSystem,this.hatchSystem])if(system){this.sprites.disposeRig(system.rig);system.surfaceRenderer.dispose();system.raw.dispose();system.vector.dispose();system.device.dispose()}this.fieldText.svg.replaceChildren();this.hatchText.svg.replaceChildren()}
  resize(){for(const [key,c]of [['field',this.field],['hatch',this.hatch]]){const r=c.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1),scale=r.width/540;this.mapping[key]={x:r.x,y:r.y,width:r.width,height:r.height,dpr,scale,offsetY:key==='hatch'?(r.height-280*scale)/2:0}}}
  hatchPoint(clientX,clientY){const r=this.hatch.getBoundingClientRect(),scale=r.width/540,offset=(r.height-280*scale)/2,x=(clientX-r.x)/scale,y=(clientY-r.y-offset)/scale,nx=(x-Config.hatch.centers[0])/Config.hatch.radius,ny=(y-Config.hatch.centerY)/(Config.hatch.radius*Config.hatch.stretch);return nx*nx+ny*ny<=1.9?{egg:0,x:nx,y:ny}:null}
  clientPoint(egg,x,y){const r=this.hatch.getBoundingClientRect(),scale=r.width/540,offset=(r.height-280*scale)/2;return{x:r.x+(Config.hatch.centers[0]+x*Config.hatch.radius)*scale,y:r.y+offset+(Config.hatch.centerY+y*Config.hatch.radius*Config.hatch.stretch)*scale}}

@@ -44,6 +44,12 @@ if (!html.includes('createVectorAssetLoader({maxEntries:32})') || !html.includes
     || !html.includes('includeSourcePaths:true') || !html.includes("new URL('assets/svg/manifest.json'")) {
   throw new Error('Game must verify and compile authored SVGs once through the pinned browser loader');
 }
+if (!html.includes('const shaderSurfaces=asset.geometry.shaderSurfaces??[]')) throw new Error('Asset validation must treat assets without shader styles as ordinary meshes');
+if (!html.includes('YarnSurfaceRenderer') || !html.includes('new YarnSurfaceRenderer(device)')
+    || !html.includes('createVectorAsset(rig.meshRenderer,compiled,{surfaceRenderer:rig.surfaceRenderer})')
+    || !html.includes('system.surfaceRenderer.dispose()')) {
+  throw new Error('GameKit yarn shader surfaces must use and dispose the shared renderer per canvas');
+}
 const appScript = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
 if (!appScript) throw new Error('Application ESM script missing');
 new vm.SourceTextModule(appScript);

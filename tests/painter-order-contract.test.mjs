@@ -37,6 +37,9 @@ test('shader surfaces and authored SVG layer order stay with the GameKit asset p
     }
   }
   assert.match(html, /record\.player\.draw\(\{projection:context\.vector\.projection,matrix/);
-  assert.doesNotMatch(html, /new YarnSurfaceRenderer|\.drawSurface\(/);
+  assert.match(html, /new YarnSurfaceRenderer\(device\)/);
+  assert.match(html, /surfaceRenderer:rig\.surfaceRenderer/);
+  assert.match(html, /system\.surfaceRenderer\.dispose\(\)/);
+  assert.doesNotMatch(html, /\.drawSurface\(/);
   assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });
