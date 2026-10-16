@@ -50,6 +50,7 @@ jobs:
         env:
           BROWSER_CHANNEL: chromium
           TEST_URL: https://byh-playground.github.io/squish-born/
+          BASELINE: '1'
           SCREENSHOT_DIR: artifacts/ci/baseline
           TEST_REPORT: artifacts/ci/baseline/verification.json
         run: npm test
