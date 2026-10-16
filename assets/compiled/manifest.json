@@ -5,31 +5,31 @@
     {
       "id": "squish-enemy-boss",
       "source": "enemy-boss.svg",
-      "sourceSha256": "504d862f681af774d640442db53e83180c1c39b84ee2cef488d8c8bac1c28e5a",
+      "sourceSha256": "d4c9fc6ce3fc2436bdbec4ca0e971fb7e80cc0892294c2d9b0157452507cfa6b",
       "module": "enemy-boss.js"
     },
     {
       "id": "squish-enemy-brute",
       "source": "enemy-brute.svg",
-      "sourceSha256": "750d853595d42060a07d70ca5b1d986e41fef33ec8dc4cba2ea0e3a76643d52c",
+      "sourceSha256": "f9d09e6e0d59cffb3196785910f47aec0c9d75d7e22510d182d3b30d4f118c11",
       "module": "enemy-brute.js"
     },
     {
       "id": "squish-enemy-moss",
       "source": "enemy-moss.svg",
-      "sourceSha256": "3e7df0961441c13e7b575f64a9f30b2523a25133485428bec822d894f2e12a56",
+      "sourceSha256": "6e25a7303020181590bf8fce61c9e8081805a493a9b94b2f85fbd64e49692504",
       "module": "enemy-moss.js"
     },
     {
       "id": "squish-enemy-runner",
       "source": "enemy-runner.svg",
-      "sourceSha256": "1f4bbe3b5cad199f080e71de72c4a91037d4a8a801bca18869a7bc32b48a1f97",
+      "sourceSha256": "80232c799c5e3f888be21fad144e596a534b42ae85bdda85fb9025026d37a0e2",
       "module": "enemy-runner.js"
     },
     {
       "id": "squish-enemy-tangle",
       "source": "enemy-tangle.svg",
-      "sourceSha256": "8600f5cf3966d57d48269b720fdae81857e6c37ee8da1b5a77353056b6fb60a4",
+      "sourceSha256": "bfed254436e356310862bb01980627aba51ac15a7e5f2aede3f66a561e23c3e2",
       "module": "enemy-tangle.js"
     },
     {
@@ -59,61 +59,61 @@
     {
       "id": "squish-unit-healer-gold",
       "source": "unit-healer-gold.svg",
-      "sourceSha256": "3619d6ad9be674ccacfc870b1ff0cb8dcdb8a72d8c5b80827d81feb33ffefc47",
+      "sourceSha256": "f4305114eac79e90f0e9233d4d9ab014a47548f62b02732afb1a501fbeb3dd33",
       "module": "unit-healer-gold.js"
     },
     {
       "id": "squish-unit-healer",
       "source": "unit-healer.svg",
-      "sourceSha256": "c022621c04c0baab5fac2bb6d3b121efdaec0b16aee9269269de91cb0d4ccf54",
+      "sourceSha256": "e80e6d84de9c58a14fac04185aa2b0712c7d8adfeb358d1f373ebb76a6f28c60",
       "module": "unit-healer.js"
     },
     {
       "id": "squish-unit-mushroom-gold",
       "source": "unit-mushroom-gold.svg",
-      "sourceSha256": "6f099655fe033517fb6ea0bcad75e472399ca2d3b278ec4194ce77667bc098d2",
+      "sourceSha256": "28401d51abf032d8bfb267fb595e2d8f1a66e16f581832be8fd6e7b9f381d508",
       "module": "unit-mushroom-gold.js"
     },
     {
       "id": "squish-unit-mushroom",
       "source": "unit-mushroom.svg",
-      "sourceSha256": "7aae7654e393ad77ed158463d35411a417cf904a442dacb6f9e2422f18dfe613",
+      "sourceSha256": "beffeaa4f51a595c618c33ee8d66ac256085b8830542006c70b9f1a5e7e2e05e",
       "module": "unit-mushroom.js"
     },
     {
       "id": "squish-unit-needle-gold",
       "source": "unit-needle-gold.svg",
-      "sourceSha256": "4ecd31a048c9d7956c89039573e25da10938b09854f473d822f7a76e11a31e80",
+      "sourceSha256": "52a50a3a07513c3c6d6861db2bf8979964ce168aabe0b83afa7cb555ca5c134b",
       "module": "unit-needle-gold.js"
     },
     {
       "id": "squish-unit-needle",
       "source": "unit-needle.svg",
-      "sourceSha256": "7329dc6b021afa0476ce55df9102412a525888977d73d6c8e9f73ae77d20a510",
+      "sourceSha256": "d064fed40be57184adfb12144a3255537ea5f39c4330ce8ad4e3329f35b2d4ad",
       "module": "unit-needle.js"
     },
     {
       "id": "squish-unit-spore-gold",
       "source": "unit-spore-gold.svg",
-      "sourceSha256": "c8d16bb2dfd3c9c1a69b3c1dad1b6d8a191283fa21bab1ea5626d2ad81e54799",
+      "sourceSha256": "612935417983076280f0f0e7925e080edb626ebedbe13434c5be488b7e14140c",
       "module": "unit-spore-gold.js"
     },
     {
       "id": "squish-unit-spore",
       "source": "unit-spore.svg",
-      "sourceSha256": "a4ce9bfa5f916aa7f1bd92ca19ba6ec6c35e3085a4e3d887ec3eea5a0c04aff7",
+      "sourceSha256": "ce9c733f3c9d1c968da6626ea02b69b0bfe6638fd4e57a013c55b915c9eca8e5",
       "module": "unit-spore.js"
     },
     {
       "id": "squish-unit-sprout-gold",
       "source": "unit-sprout-gold.svg",
-      "sourceSha256": "d0a20b498ff00dcb4358b6affb3e8568fa4f8ef7d6fbdc4016c473444c2e5f1b",
+      "sourceSha256": "4aeb7fe30a8f44c92fb2632c64031c5bc9ec05f6e027ca4b0b901429605750c4",
       "module": "unit-sprout-gold.js"
     },
     {
       "id": "squish-unit-sprout",
       "source": "unit-sprout.svg",
-      "sourceSha256": "4ccd9f1e83a7ee1175625626a5d3f7067a4568d06f0e5f43708d30072589d7f4",
+      "sourceSha256": "ebacb5a7d28de37d4436e75c8678be212e12b64fa53f7d5b01c28794084b656b",
       "module": "unit-sprout.js"
     }
   ]
