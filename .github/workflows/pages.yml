@@ -44,6 +44,15 @@ jobs:
           SCREENSHOT_DIR: artifacts/ci/gameplay
           TEST_REPORT: artifacts/ci/gameplay/verification.json
         run: npm test
+      - name: Baseline gameplay and screenshots on deployed main
+        id: baseline
+        continue-on-error: true
+        env:
+          BROWSER_CHANNEL: chromium
+          TEST_URL: https://byh-playground.github.io/squish-born/
+          SCREENSHOT_DIR: artifacts/ci/baseline
+          TEST_REPORT: artifacts/ci/baseline/verification.json
+        run: npm test
       - name: Growth and progression journey
         id: growth
         continue-on-error: true
