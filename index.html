@@ -1190,9 +1190,9 @@ function createVectorContextAdapter(context,textLayer,sprites,rig){
  const clipKey=(rule,points)=>rule+':'+Array.from(points).join(',');
  function rememberClip(points,rule){const key=clipKey(rule,points);if(!retainedClipPaths.has(key))pendingClipPaths.set(key,{points,rule});return false}
  function clipCurrentPath(rule){
-  const points=flattenTransformedClip(context),key=points&&clipKey(rule,points),handle=key&&retainedClipPaths.get(key);
-  if(handle){retainedClipPaths.delete(key);retainedClipPaths.set(key,handle);context.clipPath(handle);return true}
-  try{return context.clip(rule)}catch(error){if(!/clip\(\) accepts convex contours/.test(String(error?.message||error))||!points)throw error;return rememberClip(points,rule)}
+  const points=flattenTransformedClip(target),key=points&&clipKey(rule,points),handle=key&&retainedClipPaths.get(key);
+  if(handle){retainedClipPaths.delete(key);retainedClipPaths.set(key,handle);target.clipPath(handle);return true}
+  try{return target.clip(rule)}catch(error){if(!/clip\(\) accepts convex contours/.test(String(error?.message||error))||!points)throw error;return rememberClip(points,rule)}
  }
  const adapter=new Proxy(context,{get(target,key){
  if(key==='drawAsset')return (asset,x,y,w,h)=>sprites.draw(rig,target,asset,x,y,w,h);
