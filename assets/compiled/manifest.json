@@ -71,13 +71,13 @@
     {
       "id": "squish-unit-mushroom-gold",
       "source": "unit-mushroom-gold.svg",
-      "sourceSha256": "28401d51abf032d8bfb267fb595e2d8f1a66e16f581832be8fd6e7b9f381d508",
+      "sourceSha256": "bab981d5bdabc6e9bebbefd3c67253a637d3fcc8bde177ee4b93a1c1b76c3448",
       "module": "unit-mushroom-gold.js"
     },
     {
       "id": "squish-unit-mushroom",
       "source": "unit-mushroom.svg",
-      "sourceSha256": "beffeaa4f51a595c618c33ee8d66ac256085b8830542006c70b9f1a5e7e2e05e",
+      "sourceSha256": "5a077091373929ecb90e1ff6a73c5f391268c5d3f7e730e8b969781e8d7f5e79",
       "module": "unit-mushroom.js"
     },
     {
@@ -95,25 +95,25 @@
     {
       "id": "squish-unit-spore-gold",
       "source": "unit-spore-gold.svg",
-      "sourceSha256": "612935417983076280f0f0e7925e080edb626ebedbe13434c5be488b7e14140c",
+      "sourceSha256": "ca78a61233738906670b5636115b295245cf4c56a9a31b9f928aa31d57bc6acf",
       "module": "unit-spore-gold.js"
     },
     {
       "id": "squish-unit-spore",
       "source": "unit-spore.svg",
-      "sourceSha256": "ce9c733f3c9d1c968da6626ea02b69b0bfe6638fd4e57a013c55b915c9eca8e5",
+      "sourceSha256": "96628a7f78d9d2fb9f17b20e81ebc0ae76ceeeeed7d07cb963468717c5701b9f",
       "module": "unit-spore.js"
     },
     {
       "id": "squish-unit-sprout-gold",
       "source": "unit-sprout-gold.svg",
-      "sourceSha256": "4aeb7fe30a8f44c92fb2632c64031c5bc9ec05f6e027ca4b0b901429605750c4",
+      "sourceSha256": "91bcd22b21fc408db2fc50f67bef5fcb432ad07bdff0130e57d3f3f3f7f4e38c",
       "module": "unit-sprout-gold.js"
     },
     {
       "id": "squish-unit-sprout",
       "source": "unit-sprout.svg",
-      "sourceSha256": "ebacb5a7d28de37d4436e75c8678be212e12b64fa53f7d5b01c28794084b656b",
+      "sourceSha256": "f1d1dbedfbaa835c71f50e51c29c01d14ecb26b8a6fdae04a966216e56fee74b",
       "module": "unit-sprout.js"
     }
   ]

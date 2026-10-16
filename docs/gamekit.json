@@ -3,7 +3,7 @@
   "sourceCommit": "236974f43e1f56c77cc98cbd94e981236af90bf0",
   "distCommit": "e51471f340ea5e40ddbb70964510b8928696cf6c",
   "manifestSha256": "b60e231a9a3b583db60346d7fa236b676550a88dda2f245e1d3d541669a0647d",
-  "compiledAssetManifestSha256": "ba9d51360ea8e120e7dfdffed59f6a2dc078044ef707bc82c1d1730c90c3e2c9",
+  "compiledAssetManifestSha256": "41be916dcb9f78de7588d1fc84d728d47b0fe4649e24c007fe608462a63edd23",
   "distManifestPath": "assets/gamekit/manifest.json",
   "modules": [
     {
