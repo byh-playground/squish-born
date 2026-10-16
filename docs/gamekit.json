@@ -1,48 +1,47 @@
 {
-  "tag": "v0.10.0",
-  "sourceCommit": "8b84996aef688cae7a2634fd27d50a7ca15d555d",
-  "distCommit": "e9af07d30125b5ffade5aff7b46d266f723eb5f7",
-  "manifestSha256": "e01c8c0dd85ced758cae7aec47835934f8fece404c567fb5fde18775b43eca28",
-  "compiledAssetManifestSha256": "41be916dcb9f78de7588d1fc84d728d47b0fe4649e24c007fe608462a63edd23",
-  "distManifestPath": "assets/gamekit/manifest.json",
+  "tag": "v0.10.4",
+  "sourceCommit": "0abe586967704e193a5e85b6b0c598e58bbf193b",
+  "distCommit": "95d8676e3eaaa9f80aeed2e3361e258381511c77",
+  "officialManifestSha256": "64699fdd06eef0f94e874703cbb9f7e87c5f1ef067c68241b7dc17d9b172f625",
   "modules": [
     {
       "name": "rendering",
-      "path": "assets/gamekit/rendering.js",
-      "sha256": "fd254f4f8b91ab74dae294abbe3f2d76736648e797ccc370abf35aec8ea41f94",
-      "bytes": 246029,
-      "delivery": "local ESM"
+      "path": "rendering.js",
+      "sha256": "5ec22f1b4c3689b11cd0d4c14acc017b94ce5c11afc859df399898645976e227",
+      "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets",
-      "path": "assets/gamekit/vector-assets.js",
-      "sha256": "a4a0db5cba7ce4d7ad9cd4d411c72c6e3bfaeabcfebdaad5884ccd693bf2fda3",
-      "bytes": 129641,
-      "delivery": "local ESM"
+      "path": "vector-assets.js",
+      "sha256": "16400cab82c41e6bf7f6457dd292955dc95e140d806cf5e4c353d8ca74568fbb",
+      "delivery": "pinned CDN ESM"
+    },
+    {
+      "name": "vector-assets-loader",
+      "path": "vector-assets-loader.js",
+      "sha256": "bdc951f4f6b912a9beea98c2d6056c437064a4e08f4602ede92a2ecbd47e47cf",
+      "delivery": "pinned CDN ESM"
     },
     {
       "name": "input",
+      "path": "input.js",
       "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168",
       "bytes": 17695,
-      "delivery": "embedded data URL ESM"
+      "delivery": "pinned embedded ESM"
     },
     {
       "name": "simloop",
-      "sha256": "1be543dc7e15ef7c87043af98a1fb49a0a45a779098bfa085dc7509709f1ea9c",
-      "bytes": 50899,
-      "delivery": "embedded data URL ESM"
+      "path": "simloop.js",
+      "sha256": "f1d348b2f6a80b69c867b9bd45fc359f6d0b238885d85edfe0e9b73d03f043f4",
+      "bytes": 52086,
+      "delivery": "pinned embedded ESM"
     }
   ],
-  "compiler": {
-    "name": "GameKit vector-assets compiler",
-    "version": "0.5.0",
-    "sourceCommit": "8478ad859fe3cc6fd095032df32806a085bfa1f4",
-    "compilerSha256": "2ef463b0708b6c26ba5880d7708b661c18e79fc41ca7c880e7b821fb8f7ee513",
-    "schemaSha256": "7b9060d4a6cbd5c7e32f7923c34fbf232571a804a34211bf60e57ca1261942c8",
-    "buildDependencies": {
-      "three": "0.186.1",
-      "@xmldom/xmldom": "0.9.12"
-    }
-  },
-  "delivery": "Pinned GameKit ESM, authored SVG sources, and deterministic retained geometry generated from those SVGs"
+  "vectorAssets": {
+    "delivery": "original SVG files, SHA-256 checked and compiled once at startup by GameKit browser loader",
+    "assetManifestPath": "assets/svg/manifest.json",
+    "assetCount": 19,
+    "cacheEntries": 32,
+    "compilerSourceCommit": "0abe586967704e193a5e85b6b0c598e58bbf193b"
+  }
 }

@@ -8,13 +8,10 @@
     "test:growth": "node tests/growth.e2e.cjs",
     "test:mobile-pages": "node tests/mobile-pages.e2e.cjs",
     "check": "node --experimental-vm-modules scripts/check.cjs",
-    "vectors:compile": "node scripts/compile-vectors.mjs",
     "test:elements": "node tests/element-natural.e2e.cjs",
     "test:chain-natural": "node tests/element-natural.e2e.cjs"
   },
   "devDependencies": {
-    "@xmldom/xmldom": "0.9.12",
-    "playwright": "1.63.0",
-    "three": "0.186.1"
+    "playwright": "1.63.0"
   }
 }

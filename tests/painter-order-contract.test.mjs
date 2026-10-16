@@ -1,42 +1,42 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, resolve } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
-const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const manifest = JSON.parse(readFileSync(new URL('../assets/svg/manifest.json', import.meta.url), 'utf8'));
 
-test('compiled SVG painter-order ranges use GameKit named index variants', async () => {
-  const files = readdirSync(join(root, 'assets/compiled')).filter(file => file.endsWith('.js'));
-  assert.equal(files.length, 19);
-  let orderedLayers = 0;
+test('original SVGs are the only shipped vector assets', () => {
+  assert.equal(manifest.compileMode, 'browser-startup');
+  assert.equal(manifest.assets.length, 19);
+  assert.equal(readdirSync(new URL('../assets/svg/', import.meta.url)).filter(file => file.endsWith('.svg')).length, 19);
+  assert.ok(manifest.assets.every(asset => asset.path.startsWith('assets/svg/') && asset.path.endsWith('.svg')));
+  assert.equal(statSync(new URL('../assets/svg/manifest.json', import.meta.url)).isFile(), true);
+  assert.throws(() => statSync(new URL('../assets/compiled/', import.meta.url)), { code: 'ENOENT' });
+});
 
-  for (const file of files) {
-    const { compiledAsset } = await import(pathToFileURL(join(root, 'assets/compiled', file)).href);
-    const variants = compiledAsset.geometry.indexVariants ?? {};
-    const expressions = compiledAsset.geometry.expressionIndices ?? {};
-    for (const layer of compiledAsset.paintOrder ?? []) {
-      orderedLayers++;
-      if (layer.kind === 'mesh') {
-        assert.equal(typeof layer.indexVariant, 'string', `${file}: mesh layer needs an index variant`);
-        assert.ok(variants[layer.indexVariant] instanceof Uint16Array, `${file}: missing named index variant ${layer.indexVariant}`);
-        assert.equal(expressions[layer.indexVariant], undefined, `${file}: painter range must not masquerade as an expression`);
-      } else if (layer.kind === 'yarn') {
-        assert.ok(Number.isInteger(layer.surface) && layer.surface >= 0 && layer.surface < compiledAsset.yarnSurfaces.length,
-          `${file}: invalid yarn surface ${layer.surface}`);
-      } else {
-        assert.fail(`${file}: unknown paint layer kind ${layer.kind}`);
-      }
+test('the pinned shared browser loader compiles once at startup and verifies each source', () => {
+  assert.match(html, /vector-assets-loader\.js/);
+  assert.match(html, /createVectorAssetLoader\(\{maxEntries:32\}\)/);
+  assert.match(html, /expectedSha256:item\.sha256/);
+  assert.match(html, /sourcePath:item\.path/);
+  assert.match(html, /includeSourcePaths:true/);
+  assert.equal((html.match(/createVectorAssetLoader\(/g) || []).length, 1);
+  assert.doesNotMatch(html, /compileVectorAssetFile|compiledAssetModuleSource|assets\/compiled/);
+});
+
+test('shader surfaces and authored SVG layer order stay with the GameKit asset player', () => {
+  for (const item of manifest.assets) {
+    const source = readFileSync(new URL('../' + item.path, import.meta.url), 'utf8');
+    const encoded = source.match(/<metadata id="vector-asset">([\s\S]*?)<\/metadata>/)?.[1];
+    assert.ok(encoded, `${item.path}: vector metadata is required`);
+    const metadata = JSON.parse(encoded);
+    assert.equal(metadata.id, item.id);
+    for (const style of metadata.styles || []) {
+      if (style.kind === 'yarn' || style.kind === 'sketch') assert.equal(style.backend, 'shader', `${item.path}: shader backend must be authored in the SVG`);
     }
   }
-
-  assert.ok(orderedLayers > 0, 'compiled SVGs must preserve authored paint order');
-  const compiler = readFileSync(join(root, 'scripts/vector-compiler/compiler.js'), 'utf8');
-  assert.match(compiler, /indexVariants\[name\]\s*=\s*retainedIndices\.slice/);
-  assert.match(compiler, /indexVariants,\s*morphCount,\s*yarnSurfaces,\s*paintOrder/);
-  assert.doesNotMatch(compiler, /expressionIndices\[name\]\s*=\s*retainedIndices\.slice/);
-  const html = readFileSync(join(root, 'index.html'), 'utf8');
-  assert.match(html, /indexVariant:layer\.indexVariant/);
-  assert.match(html, /stencilRef:context\.vector\.stencilDepth\|\|null/);
-  assert.match(html, /drawSurface\(entry\.handle,\{[^}]*stencilRef:context\.vector\.stencilDepth\|\|null/);
+  assert.match(html, /record\.player\.draw\(\{projection:context\.vector\.projection,matrix/);
+  assert.doesNotMatch(html, /new YarnSurfaceRenderer|\.drawSurface\(/);
+  assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });
