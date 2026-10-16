@@ -50,6 +50,7 @@ if (!html.includes('YarnSurfaceRenderer') || !html.includes('new YarnSurfaceRend
     || !html.includes('system.surfaceRenderer.dispose()')) {
   throw new Error('GameKit yarn shader surfaces must use and dispose the shared renderer per canvas');
 }
+if (!html.includes('function multiplyAffine(a,b)')) throw new Error('Sprite asset drawing must compose canvas and SVG transforms');
 const appScript = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
 if (!appScript) throw new Error('Application ESM script missing');
 new vm.SourceTextModule(appScript);

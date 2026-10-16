@@ -41,5 +41,6 @@ test('shader surfaces and authored SVG layer order stay with the GameKit asset p
   assert.match(html, /surfaceRenderer:rig\.surfaceRenderer/);
   assert.match(html, /system\.surfaceRenderer\.dispose\(\)/);
   assert.doesNotMatch(html, /\.drawSurface\(/);
+  assert.match(html, /function multiplyAffine\(a,b\)/);
   assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });
