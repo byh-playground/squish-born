@@ -30,5 +30,6 @@ test('gradient adapters preserve native gradient endpoints and receiver', () => 
   assert.match(html, /createLinearGradient\(target,x0,y0,x1,y1\)/);
   assert.match(html, /createRadialGradient\(target,x0,y0,r0,x1,y1,r1\)/);
   assert.doesNotMatch(html, /LinearGradientApprox|fitCurrentClipToGameKit|resampleClipContour/);
-  assert.match(html, /return target\.clip\(rule\)/);
+  assert.match(html, /class RecordedPath\{[\s\S]*?replay\(ctx\)\{for\(const \[name,\.\.\.args\]of this\.commands\)ctx\[name\]\(\.\.\.args\)\}\}/);
+  assert.match(html, /path instanceof RecordedPath\|\|path instanceof VectorPath\).*?path\.replay\(target\);return target\.clip\(args\[1\]\|\|'nonzero'\)/);
 });
