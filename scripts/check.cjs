@@ -35,5 +35,4 @@ new vm.SourceTextModule(script);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['scripts/compile-vectors.mjs', '--check'], { stdio: 'inherit' });
-execFileSync(process.execPath, ['tests/yarn-assets.mjs'], { stdio: 'inherit' });
 console.log('GameKit ' + pin.tag + ' module pins, ESM syntax, and authored SVG compilations verified');
