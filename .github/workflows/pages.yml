@@ -25,8 +25,42 @@ jobs:
         with:
           path: _site
   browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - id: gameplay
+            command: "npm test"
+            directory: artifacts/ci/gameplay
+            report: artifacts/ci/gameplay/verification.json
+            test_url: ""
+            baseline: ""
+          - id: baseline
+            command: "npm test"
+            directory: artifacts/ci/baseline
+            report: artifacts/ci/baseline/verification.json
+            test_url: https://byh-playground.github.io/squish-born/
+            baseline: "1"
+          - id: growth
+            command: "npm run test:growth"
+            directory: artifacts/ci/growth
+            report: ""
+            test_url: ""
+            baseline: ""
+          - id: mobile
+            command: "npm run test:mobile-pages"
+            directory: artifacts/ci/mobile-pages
+            report: ""
+            test_url: ""
+            baseline: ""
+          - id: effects
+            command: "npm run test:elements"
+            directory: artifacts/ci/elements
+            report: ""
+            test_url: ""
+            baseline: ""
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
@@ -36,72 +70,90 @@ jobs:
       - run: npm ci
       - name: Install official Playwright Chromium and media tools
         run: npx playwright install --with-deps chromium
-      - name: Gameplay, desktop input, mobile touch, and visual captures
-        id: gameplay
+      - name: Run ${{ matrix.scenario.id }} browser scenario
+        id: scenario
         continue-on-error: true
+        timeout-minutes: 3
         env:
           BROWSER_CHANNEL: chromium
-          SCREENSHOT_DIR: artifacts/ci/gameplay
-          TEST_REPORT: artifacts/ci/gameplay/verification.json
-        run: npm test
-      - name: Baseline gameplay and screenshots on deployed main
-        id: baseline
-        continue-on-error: true
-        env:
-          BROWSER_CHANNEL: chromium
-          TEST_URL: https://byh-playground.github.io/squish-born/
-          BASELINE: '1'
-          SCREENSHOT_DIR: artifacts/ci/baseline
-          TEST_REPORT: artifacts/ci/baseline/verification.json
-        run: npm test
-      - name: Growth and progression journey
-        id: growth
-        continue-on-error: true
-        env:
-          BROWSER_CHANNEL: chromium
-          SCREENSHOT_DIR: artifacts/ci/growth
-        run: npm run test:growth
-      - name: Mobile page layout at six viewport sizes
-        id: mobile
-        continue-on-error: true
-        env:
-          BROWSER_CHANNEL: chromium
-          SCREENSHOT_DIR: artifacts/ci/mobile-pages
-        run: npm run test:mobile-pages
-      - name: Natural battle effects on desktop and mobile
-        id: effects
-        continue-on-error: true
-        env:
-          BROWSER_CHANNEL: chromium
-          SCREENSHOT_DIR: artifacts/ci/elements
-        run: npm run test:elements
-      - name: Compare deployed baseline with candidate hatch results
-        id: comparison
+          SCREENSHOT_DIR: ${{ matrix.scenario.directory }}
+          TEST_REPORT: ${{ matrix.scenario.report }}
+          TEST_URL: ${{ matrix.scenario.test_url }}
+          BASELINE: ${{ matrix.scenario.baseline }}
+        run: ${{ matrix.scenario.command }}
+      - name: Upload ${{ matrix.scenario.id }} reports, screenshots, and videos
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: squish-browser-evidence-${{ matrix.scenario.id }}-${{ github.run_id }}
+          path: ${{ matrix.scenario.directory }}/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Require scenario to pass
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.scenario.outcome }}
+        run: |
+          if [[ "$OUTCOME" != success ]]; then
+            echo "::error::Browser scenario did not pass: ${{ matrix.scenario.id }}=$OUTCOME"
+            exit 1
+          fi
+  comparison:
+    if: always()
+    needs: [browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download candidate gameplay evidence
+        id: gameplay
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: squish-browser-evidence-gameplay-${{ github.run_id }}
+          path: artifacts/ci/gameplay
+      - name: Download deployed baseline evidence
+        id: baseline
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: squish-browser-evidence-baseline-${{ github.run_id }}
+          path: artifacts/ci/baseline
+      - name: Download growth evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: squish-browser-evidence-growth-${{ github.run_id }}
+          path: artifacts/ci/growth
+      - name: Download mobile evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: squish-browser-evidence-mobile-${{ github.run_id }}
+          path: artifacts/ci/mobile-pages
+      - name: Download effects evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: squish-browser-evidence-effects-${{ github.run_id }}
+          path: artifacts/ci/elements
+      - name: Compare deployed baseline with candidate hatch results
+        id: compare
+        if: always()
+        continue-on-error: true
         env:
           BASELINE_REPORT: artifacts/ci/baseline/verification.json
           CANDIDATE_REPORT: artifacts/ci/gameplay/verification.json
         run: node scripts/compare-hatch-results.cjs "$BASELINE_REPORT" "$CANDIDATE_REPORT"
-      - name: Require all real browser scenarios to pass
-        if: always()
-        shell: bash
-        env:
-          GAMEPLAY: ${{ steps.gameplay.outcome }}
-          BASELINE: ${{ steps.baseline.outcome }}
-          GROWTH: ${{ steps.growth.outcome }}
-          MOBILE: ${{ steps.mobile.outcome }}
-          EFFECTS: ${{ steps.effects.outcome }}
-          COMPARISON: ${{ steps.comparison.outcome }}
-        run: |
-          failed=0
-          for scenario in "gameplay=$GAMEPLAY" "baseline=$BASELINE" "growth=$GROWTH" "mobile=$MOBILE" "effects=$EFFECTS" "baseline-candidate-comparison=$COMPARISON"; do
-            if [[ "$scenario" != *=success ]]; then
-              echo "::error::Browser scenario did not pass: $scenario"
-              failed=1
-            fi
-          done
-          exit "$failed"
-      - name: Upload browser reports, screenshots, and videos
+      - name: Upload combined browser reports, screenshots, and videos
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -109,9 +161,26 @@ jobs:
           path: artifacts/ci/
           if-no-files-found: warn
           retention-days: 30
+      - name: Require actual baseline comparison to pass
+        if: always()
+        shell: bash
+        env:
+          GAMEPLAY_EVIDENCE: ${{ steps.gameplay.outcome }}
+          BASELINE_EVIDENCE: ${{ steps.baseline.outcome }}
+          COMPARISON: ${{ steps.compare.outcome }}
+          BROWSER: ${{ needs.browser.result }}
+        run: |
+          failed=0
+          for result in "candidate-evidence=$GAMEPLAY_EVIDENCE" "baseline-evidence=$BASELINE_EVIDENCE" "browser-scenarios=$BROWSER" "baseline-candidate-comparison=$COMPARISON"; do
+            if [[ "$result" != *=success ]]; then
+              echo "::error::Browser validation did not pass: $result"
+              failed=1
+            fi
+          done
+          exit "$failed"
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [verify, browser]
+    needs: [verify, browser, comparison]
     runs-on: ubuntu-latest
     permissions:
       pages: write
