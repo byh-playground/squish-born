@@ -60,7 +60,8 @@ jobs:
             test_url: ""
             baseline: ""
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Mobile's 360-second watchdog gets setup and artifact-cleanup margin.
+    timeout-minutes: ${{ matrix.scenario.id == 'mobile' && 9 || 5 }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
@@ -73,7 +74,7 @@ jobs:
       - name: Run ${{ matrix.scenario.id }} browser scenario
         id: scenario
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: ${{ matrix.scenario.id == 'mobile' && 7 || 3 }}
         env:
           BROWSER_CHANNEL: chromium
           SCREENSHOT_DIR: ${{ matrix.scenario.directory }}
