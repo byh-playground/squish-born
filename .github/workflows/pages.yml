@@ -75,6 +75,13 @@ jobs:
           BROWSER_CHANNEL: chromium
           SCREENSHOT_DIR: artifacts/ci/elements
         run: npm run test:elements
+      - name: Compare deployed baseline with candidate hatch results
+        id: comparison
+        if: always()
+        env:
+          BASELINE_REPORT: artifacts/ci/baseline/verification.json
+          CANDIDATE_REPORT: artifacts/ci/gameplay/verification.json
+        run: node scripts/compare-hatch-results.cjs "$BASELINE_REPORT" "$CANDIDATE_REPORT"
       - name: Require all real browser scenarios to pass
         if: always()
         shell: bash
@@ -84,9 +91,10 @@ jobs:
           GROWTH: ${{ steps.growth.outcome }}
           MOBILE: ${{ steps.mobile.outcome }}
           EFFECTS: ${{ steps.effects.outcome }}
+          COMPARISON: ${{ steps.comparison.outcome }}
         run: |
           failed=0
-          for scenario in "gameplay=$GAMEPLAY" "baseline=$BASELINE" "growth=$GROWTH" "mobile=$MOBILE" "effects=$EFFECTS"; do
+          for scenario in "gameplay=$GAMEPLAY" "baseline=$BASELINE" "growth=$GROWTH" "mobile=$MOBILE" "effects=$EFFECTS" "baseline-candidate-comparison=$COMPARISON"; do
             if [[ "$scenario" != *=success ]]; then
               echo "::error::Browser scenario did not pass: $scenario"
               failed=1
