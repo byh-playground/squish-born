@@ -1418,7 +1418,7 @@ drawKneadDimple(ctx,x,y,angle,{pressed=false,focus=0,amount=.2}={}){
   const r=Config.hatch.radius,sy=Config.hatch.stretch,p=egg.press;
   const pts=Array.from({length:160},(_,i)=>{const a=i/160*Math.PI*2,v=egg.radiusAt(a);return {x:Math.cos(a)*v*r*egg.form.squash,y:Math.sin(a)*v*r*sy}}),path=pathFromPoints(pts,true);
   ctx.save();ctx.save();ctx.translate(0,5);ctx.fillStyle='#ae8b6330';ctx.fill(path);ctx.restore();ctx.fillStyle='#cda98a';ctx.fill(path);
-  ctx.save();ctx.beginPath();ctx.ellipse(0,0,r*1.02,r*sy*1.02,0,0,Math.PI*2);ctx.clip();ctx.drawAsset(this.sprites.kneadSkin(),-r*1.55,-r*1.55*sy,r*3.1,r*3.1*sy);
+  ctx.save();ctx.drawAsset(this.sprites.kneadSkin(),-r*1.55,-r*1.55*sy,r*3.1,r*3.1*sy);ctx.beginPath();ctx.ellipse(0,0,r*1.02,r*sy*1.02,0,0,Math.PI*2);ctx.clip();
   const shade=ctx.createRadialGradient(-27,-32,5,2,8,94);shade.addColorStop(0,'#fff9dc38');shade.addColorStop(.5,'#f5d0a900');shade.addColorStop(1,'#886c6650');ctx.fillStyle=shade;ctx.fillRect(-100,-104,200,208);ctx.restore();
   ctx.strokeStyle='#aa886b';ctx.lineWidth=1.7;ctx.stroke(path);
   // 완성 목표 외곽선은 누르기 전부터 항상 보여준다. 현재 찌그러짐이 목표보다 안/밖 어디에 있는지 바로 읽을 수 있다.
