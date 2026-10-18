@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "compileMode": "browser-startup",
+  "assets": [
+    {
+      "key": "enemy-boss",
+      "id": "squish-enemy-boss",
+      "path": "assets/svg/enemy-boss.svg",
+      "sha256": "1609a4c4881deb50894a66c6d6a0e216e162dc61f2579fac4057056633709099"
+    },
+    {
+      "key": "enemy-brute",
+      "id": "squish-enemy-brute",
+      "path": "assets/svg/enemy-brute.svg",
+      "sha256": "deea6ce3976fdf7aae8608871bca21ce60ca5fd5e24228c2541516f165e33e7c"
+    },
+    {
+      "key": "enemy-moss",
+      "id": "squish-enemy-moss",
+      "path": "assets/svg/enemy-moss.svg",
+      "sha256": "0bb5fa52cc526eeedf62225750e20dfe384e16081e159ad95534534dd9be7cb9"
+    },
+    {
+      "key": "enemy-runner",
+      "id": "squish-enemy-runner",
+      "path": "assets/svg/enemy-runner.svg",
+      "sha256": "1a7557da089cb309327e58274b202bd0d7ea32de4f4168ecb81cffec421075cf"
+    },
+    {
+      "key": "enemy-tangle",
+      "id": "squish-enemy-tangle",
+      "path": "assets/svg/enemy-tangle.svg",
+      "sha256": "1044d02a097772d07879c0a2efa8acfd0162a4276817b4d36c7ce5fccc68e087"
+    },
+    {
+      "key": "field-background",
+      "id": "squish-field-background",
+      "path": "assets/svg/field-background.svg",
+      "sha256": "8d1577f642eb0ae3f3b293151f201c1d6c570e1864be2c309ba1964261feeef3"
+    },
+    {
+      "key": "hatch-background",
+      "id": "squish-hatch-background",
+      "path": "assets/svg/hatch-background.svg",
+      "sha256": "b6cfa2eafcdd8e677286af4248c8a8886a8ecd47e2ab1c49b7ffc4c0831a9453"
+    },
+    {
+      "key": "knead-skin",
+      "id": "squish-knead-skin",
+      "path": "assets/svg/knead-skin.svg",
+      "sha256": "83707536e73629b918381f9f84b2f8acb8e2ab49ff0acba9574feea2912c4152"
+    },
+    {
+      "key": "nest",
+      "id": "squish-nest",
+      "path": "assets/svg/nest.svg",
+      "sha256": "26701c32d10a4ca9390dfeda227bb1b011a621df8cfc69a9b4ac5bfb94153031"
+    },
+    {
+      "key": "unit-healer-gold",
+      "id": "squish-unit-healer-gold",
+      "path": "assets/svg/unit-healer-gold.svg",
+      "sha256": "110a0eb1391d5fe31e617dca1b11789f2625ccb91e9fa9778bc1e13410b42a8f"
+    },
+    {
+      "key": "unit-healer",
+      "id": "squish-unit-healer",
+      "path": "assets/svg/unit-healer.svg",
+      "sha256": "35629a8d84bf1fee4ad7b6e3dd215029029e2ffade8a8eb160c1f714e22faf6e"
+    },
+    {
+      "key": "unit-mushroom-gold",
+      "id": "squish-unit-mushroom-gold",
+      "path": "assets/svg/unit-mushroom-gold.svg",
+      "sha256": "7aebebfb6318d5cdd9b280bed915700ad01d8b66adfc93b954d13ef31587eab5"
+    },
+    {
+      "key": "unit-mushroom",
+      "id": "squish-unit-mushroom",
+      "path": "assets/svg/unit-mushroom.svg",
+      "sha256": "b83d44c277faca0a3079cdc5139bc5b5bcb3255fdec416842e141fd19a5cd12f"
+    },
+    {
+      "key": "unit-needle-gold",
+      "id": "squish-unit-needle-gold",
+      "path": "assets/svg/unit-needle-gold.svg",
+      "sha256": "5ebf323cfd4824ff33f9fbf9c5e73036f895ae93db8d9a2905b848ae81a9f7b2"
+    },
+    {
+      "key": "unit-needle",
+      "id": "squish-unit-needle",
+      "path": "assets/svg/unit-needle.svg",
+      "sha256": "9f03011dcc9c752e553fd2abc9e1e3f74215204126e99a24292a9bf3c8019b52"
+    },
+    {
+      "key": "unit-spore-gold",
+      "id": "squish-unit-spore-gold",
+      "path": "assets/svg/unit-spore-gold.svg",
+      "sha256": "a8a972abb8336276c38dd246ba86fde149cc3705661e7909d31c746794c9ceb6"
+    },
+    {
+      "key": "unit-spore",
+      "id": "squish-unit-spore",
+      "path": "assets/svg/unit-spore.svg",
+      "sha256": "b596940ed95630e69cddc21bbea603f8e35b17c1bfebcda8ab5eeacee75d8d16"
+    },
+    {
+      "key": "unit-sprout-gold",
+      "id": "squish-unit-sprout-gold",
+      "path": "assets/svg/unit-sprout-gold.svg",
+      "sha256": "2e762eeb9dbdb6c7ece7d514e541992be44ed0d2d19600e40fc73bb3e798ad03"
+    },
+    {
+      "key": "unit-sprout",
+      "id": "squish-unit-sprout",
+      "path": "assets/svg/unit-sprout.svg",
+      "sha256": "3271e931d148c56f9c5b9fe6ada65229215b33c4654ae6c1d5cea2639e40f934"
+    }
+  ]
+}
