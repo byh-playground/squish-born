@@ -1,39 +1,39 @@
 {
-  "tag": "v0.10.4",
-  "sourceCommit": "0abe586967704e193a5e85b6b0c598e58bbf193b",
-  "distCommit": "95d8676e3eaaa9f80aeed2e3361e258381511c77",
-  "officialManifestSha256": "64699fdd06eef0f94e874703cbb9f7e87c5f1ef067c68241b7dc17d9b172f625",
+  "tag": "v0.14.3",
+  "sourceCommit": "dd59a57fcf66409cef16632ffb433c0b760324fa",
+  "distCommit": "418e17c455db56d6ed073d82d115191d9dd8bf04",
+  "officialManifestSha256": "20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e",
   "modules": [
     {
       "name": "rendering",
       "path": "rendering.js",
-      "sha256": "5ec22f1b4c3689b11cd0d4c14acc017b94ce5c11afc859df399898645976e227",
+      "sha256": "021b11f83b49be3e94cfe0a67769dcd248b9463325b6dcc55ea4943a0ea6c18b",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets",
       "path": "vector-assets.js",
-      "sha256": "16400cab82c41e6bf7f6457dd292955dc95e140d806cf5e4c353d8ca74568fbb",
+      "sha256": "288eadf3830df2836f0b103dc513a906b5b9dbd58660885c18b2a0941d0e877a",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets-loader",
       "path": "vector-assets-loader.js",
-      "sha256": "bdc951f4f6b912a9beea98c2d6056c437064a4e08f4602ede92a2ecbd47e47cf",
+      "sha256": "56042179b1b669d69d4791c5a1ad7bbd1927d8686fa4e9192504fb248c2170e2",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "input",
       "path": "input.js",
-      "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168",
-      "bytes": 17695,
+      "sha256": "a969755a39702723b35b6a1503e9b2e53a431ea91845017474c979752fdfb51f",
+      "bytes": 19111,
       "delivery": "pinned embedded ESM"
     },
     {
       "name": "simloop",
       "path": "simloop.js",
-      "sha256": "f1d348b2f6a80b69c867b9bd45fc359f6d0b238885d85edfe0e9b73d03f043f4",
-      "bytes": 52086,
+      "sha256": "c25a8f7f4999e4fe8beb6b08167fa4d0934c34098db2bf912335e81db53c4ef8",
+      "bytes": 57952,
       "delivery": "pinned embedded ESM"
     }
   ],
@@ -42,6 +42,6 @@
     "assetManifestPath": "assets/svg/manifest.json",
     "assetCount": 19,
     "cacheEntries": 32,
-    "compilerSourceCommit": "0abe586967704e193a5e85b6b0c598e58bbf193b"
+    "compilerSourceCommit": "dd59a57fcf66409cef16632ffb433c0b760324fa"
   }
 }
