@@ -31,7 +31,7 @@ Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright
 
 ## 0.15.1 — Browser-startup SVG compilation
 
-Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit 0.10.4 browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; the GameKit asset player draws the resulting geometry. No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game.
+Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit 0.14.3 browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; the GameKit asset player draws the resulting geometry. No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game.
 
 The deploy requires the original SVG directory and its manifest alongside `index.html`. Run `npm run check` to verify the SDK pin, source hashes, and startup-loader contract. CI runs the browser gameplay scenarios and captures the yarn-surface screenshots; local Chromium execution is not part of this migration.
 

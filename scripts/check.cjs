@@ -9,10 +9,17 @@ const html = fs.readFileSync('index.html', 'utf8');
 const pin = JSON.parse(fs.readFileSync('docs/gamekit.json', 'utf8'));
 const manifest = JSON.parse(fs.readFileSync('assets/svg/manifest.json', 'utf8'));
 const dist = 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@' + pin.distCommit + '/';
-if (pin.tag !== 'v0.10.4' || pin.sourceCommit !== '0abe586967704e193a5e85b6b0c598e58bbf193b'
-    || pin.distCommit !== '95d8676e3eaaa9f80aeed2e3361e258381511c77'
-    || pin.officialManifestSha256 !== '64699fdd06eef0f94e874703cbb9f7e87c5f1ef067c68241b7dc17d9b172f625') {
-  throw new Error('GameKit 0.10.4 SDK provenance pin mismatch');
+const officialManifestBytes = fs.readFileSync('docs/gamekit-manifest.json');
+const officialManifest = JSON.parse(officialManifestBytes.toString('utf8'));
+if (hash(officialManifestBytes) !== pin.officialManifestSha256 || officialManifest.schemaVersion !== 2) throw new Error('Official GameKit manifest pin mismatch');
+const publishedModules = new Map(officialManifest.modules.map(module => [module.file, module.sha256]));
+for (const module of pin.modules) {
+  if (publishedModules.get(module.path) !== module.sha256) throw new Error('Pinned GameKit module hash differs from the official manifest: ' + module.name);
+}
+if (pin.tag !== 'v0.14.3' || pin.sourceCommit !== 'dd59a57fcf66409cef16632ffb433c0b760324fa'
+    || pin.distCommit !== '418e17c455db56d6ed073d82d115191d9dd8bf04'
+    || pin.officialManifestSha256 !== '20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e') {
+  throw new Error('GameKit 0.14.3 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
   if (!html.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
@@ -57,4 +64,4 @@ new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw new Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['--test', 'tests/gradient-adapter.test.mjs', 'tests/painter-order-contract.test.mjs'], { stdio: 'inherit' });
-console.log('GameKit 0.10.4 provenance, source SVG hashes, startup loader contract, and application ESM verified');
+console.log('GameKit 0.14.3 provenance, source SVG hashes, startup loader contract, and application ESM verified');
