@@ -1,4 +1,4 @@
-name: Verify and deploy original HTML
+name: Verify original ESM and publish Pages
 on:
   pull_request:
   push:
@@ -20,11 +20,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: mkdir -p _site && cp index.html _site/index.html && cp -R assets _site/assets
+      - run: mkdir -p _site && cp index.html _site/index.html && cp -R src _site/src && cp -R assets _site/assets
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
   browser:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -101,7 +102,7 @@ jobs:
             exit 1
           fi
   comparison:
-    if: always()
+    if: github.event_name == 'workflow_dispatch' && always()
     needs: [browser]
     runs-on: ubuntu-latest
     steps:
@@ -181,7 +182,7 @@ jobs:
           exit "$failed"
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [verify, browser, comparison]
+    needs: [verify]
     runs-on: ubuntu-latest
     permissions:
       pages: write

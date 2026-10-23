@@ -14,7 +14,7 @@ Press, hold and release textured balls to hatch yarn companions in a cozy auto-d
 - Space / 1: 현재 목표 위치 보조. 누르는 시간은 직접 조절합니다. P / Esc 또는 상단 일시정지 버튼으로 쉽니다.
 - 처음 화면에서 정원 방어 또는 전투 없는 연습을 선택합니다. 도감·소리 설정은 상단에서 엽니다.
 
-빌드가 필요 없습니다. 실행 파일은 **index.html 하나**이며 공식 GameKit 두 모듈과 녹음 음원까지 내장합니다. Node.js 22 이상에서:
+게임 빌드는 필요 없습니다. 실행 진입점은 `index.html`이며 원본 CSS·ESM은 `src/` 아래에서 로드합니다. SVG와 음원·고정 GameKit 모듈도 함께 제공합니다. Node.js 22 이상에서:
 
 ```sh
 npm run dev
@@ -33,7 +33,7 @@ Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright
 
 Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit 0.14.3 browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; the GameKit asset player draws the resulting geometry. No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 1; simulation and sorting remain in the game.
 
-The deploy requires the original SVG directory and its manifest alongside `index.html`. Run `npm run check` to verify the SDK pin, source hashes, and startup-loader contract. CI runs the browser gameplay scenarios and captures the yarn-surface screenshots; local Chromium execution is not part of this migration.
+The deploy requires `index.html`, the authored `src/` modules/styles, and the original SVG directory/manifest. Run `npm run check` to verify the SDK pin, source hashes, and startup-loader contract. CI checks source/SDK/asset integrity without a deploy build. Full browser scenarios and visual comparisons remain available via manual workflow dispatch.
 
 ## 0.14.3 · 화면 전환 시 손길 정리
 
@@ -83,7 +83,7 @@ The deploy requires the original SVG directory and its manifest alongside `index
 
 물리 스마트폰·스피커 청취·5웨이브 전체 밸런스·9종의 모든 특성과 겹볼 조합은 이번 재검증 범위가 아닙니다. 멀티플레이 기능은 없습니다. 원본의 과거 검증 주장을 현재 PASS로 합산하지 않습니다.
 
-PR CI는 실제 내장 SDK 해시와 ESM 구문을 검사합니다. main 병합 시 동일 index.html을 GitHub Actions Pages에 배포합니다. CI 구문 검사와 실제 브라우저 검증 기록은 별개입니다.
+PR CI는 실제 내장 SDK 해시와 ESM 구문을 검사합니다. main 병합 시 `index.html`과 참조하는 원본 `src/`, `assets/`를 GitHub Actions Pages에 내용 변경 없이 복사합니다. CI 구문 검사와 실제 브라우저 검증 기록은 별개입니다.
 
 ## 원본·공통 모듈·권리
 

@@ -25,8 +25,11 @@ test('gradient adapters preserve native gradient endpoints and receiver', () => 
     { name: 'radial', receiver: target, args: [3, 7, 2, 19, 31, 11] },
   ]);
 
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /import\s+\{\s*createLinearGradient,\s*createRadialGradient\s*\}\s+from\s+['"]\.\/assets\/gradient-adapter\.js['"]/);
+  const html = [
+    '../index.html',
+    '../src/main.js',
+  ].map(file => readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n');
+  assert.match(html, /import\s+\{\s*createLinearGradient,\s*createRadialGradient\s*\}\s+from\s+['"]\.\.\/assets\/gradient-adapter\.js['"]/);
   assert.match(html, /createLinearGradient\(target,x0,y0,x1,y1\)/);
   assert.match(html, /createRadialGradient\(target,x0,y0,r0,x1,y1,r1\)/);
   assert.doesNotMatch(html, /LinearGradientApprox|fitCurrentClipToGameKit|resampleClipContour/);

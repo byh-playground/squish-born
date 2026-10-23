@@ -3,7 +3,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const html = [
+  '../index.html',
+  '../src/main.js',
+  '../src/presentation/vector-path.js',
+].map(file => readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n');
 const manifest = JSON.parse(readFileSync(new URL('../assets/svg/manifest.json', import.meta.url), 'utf8'));
 
 test('original SVGs are the only shipped vector assets', () => {
