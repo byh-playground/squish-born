@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process');
 
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const html = fs.readFileSync('index.html', 'utf8');
+const source = fs.readFileSync('src/main.js', 'utf8');
 const pin = JSON.parse(fs.readFileSync('docs/gamekit.json', 'utf8'));
 const manifest = JSON.parse(fs.readFileSync('assets/svg/manifest.json', 'utf8'));
 const dist = 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@' + pin.distCommit + '/';
@@ -22,10 +23,10 @@ if (pin.tag !== 'v0.14.3' || pin.sourceCommit !== 'dd59a57fcf66409cef16632ffb433
   throw new Error('GameKit 0.14.3 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
-  if (!html.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
+  if (!source.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
 }
 const embedded = pin.modules.filter(item => item.delivery === 'pinned embedded ESM');
-const dataModules = [...html.matchAll(/import\('data:text\/javascript;base64,([^']+)'\)/g)];
+const dataModules = [...source.matchAll(/import\('data:text\/javascript;base64,([^']+)'\)/g)];
 if (dataModules.length !== embedded.length) throw new Error('Embedded SDK module count mismatch');
 for (let index = 0; index < embedded.length; index++) {
   const bytes = Buffer.from(dataModules[index][1], 'base64');
@@ -47,18 +48,18 @@ for (const item of manifest.assets) {
 if (fs.existsSync('assets/compiled') || fs.existsSync('assets/gamekit/rendering.js') || fs.existsSync('assets/gamekit/vector-assets.js')) {
   throw new Error('Compiled mesh arrays and local copies of shared SDK modules must not be published');
 }
-if (!html.includes('createVectorAssetLoader({maxEntries:32})') || !html.includes('expectedSha256:item.sha256')
-    || !html.includes('includeSourcePaths:true') || !html.includes("new URL('assets/svg/manifest.json'")) {
+if (!source.includes('createVectorAssetLoader({maxEntries:32})') || !source.includes('expectedSha256:item.sha256')
+    || !source.includes('includeSourcePaths:true') || !source.includes("new URL('assets/svg/manifest.json'")) {
   throw new Error('Game must verify and compile authored SVGs once through the pinned browser loader');
 }
-if (!html.includes('const shaderSurfaces=asset.geometry.shaderSurfaces??[]')) throw new Error('Asset validation must treat assets without shader styles as ordinary meshes');
-if (!html.includes('YarnSurfaceRenderer') || !html.includes('new YarnSurfaceRenderer(device)')
-    || !html.includes('createVectorAsset(rig.meshRenderer,compiled,{surfaceRenderer:rig.surfaceRenderer})')
-    || !html.includes('system.surfaceRenderer.dispose()')) {
+if (!source.includes('const shaderSurfaces=asset.geometry.shaderSurfaces??[]')) throw new Error('Asset validation must treat assets without shader styles as ordinary meshes');
+if (!source.includes('YarnSurfaceRenderer') || !source.includes('new YarnSurfaceRenderer(device)')
+    || !source.includes('createVectorAsset(rig.meshRenderer,compiled,{surfaceRenderer:rig.surfaceRenderer})')
+    || !source.includes('system.surfaceRenderer.dispose()')) {
   throw new Error('GameKit yarn shader surfaces must use and dispose the shared renderer per canvas');
 }
-if (!html.includes('function multiplyAffine(a,b)')) throw new Error('Sprite asset drawing must compose canvas and SVG transforms');
-const appScript = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+if (!source.includes('function multiplyAffine(a,b)')) throw new Error('Sprite asset drawing must compose canvas and SVG transforms');
+const appScript = source;
 if (!appScript) throw new Error('Application ESM script missing');
 new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
