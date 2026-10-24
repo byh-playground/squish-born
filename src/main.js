@@ -1675,6 +1675,7 @@ class App{
  applyRoute(){const route=location.hash.replace(/^#/,'')||'/';
   const growth=route.match(/^\/growth\/(hatch|chain|element|defense)(?:\/([a-zA-Z]+))?(?:\/(tree|effect|conditions))?$/),collection=route.match(/^\/collection(?:\/(normal|gold)\/([0-4]))?$/),reader=route.match(/^\/(help|about)(?:\/(\d+))?$/);
   if(growth||collection||reader||route==='/sound'){if(this.sim.state==='running'){this.cancelInput();this.sim.pause();this.loop?.resetTiming();this.audio.stopAll()}this.modalRoute=route;if(growth)this.showGrowth(growth[1],growth[2],growth[3]);else if(collection)this.showCollection();else if(reader){this.readerPage=Number(reader[2])||0;this.showHelp(reader[1]==='about')}else this.showSound();return}
+  if(route==='/showcase')return;
   if(route!=='/')history.replaceState(null,'','#/');
   if(this.sim.state==='intro')this.showIntro();else if(this.sim.state==='won'||this.sim.state==='lost')this.showResult();else{this.closeModal();if(this.sim.state==='paused'){this.sim.resume();this.loop?.resetTiming();this.clock.last=performance.now();this.audio.unlock().catch(()=>this.soundFailure())}}
  }
