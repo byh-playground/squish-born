@@ -6,6 +6,20 @@
 <meta name="theme-color" content="#f3eee4">
 <title>꾹꾹 디펜스 / Squish Born</title>
 <link rel="stylesheet" href="./src/styles/main.css">
+<script>
+// An intro iframe is a disposable real game run, never a saved player session.
+if (new URLSearchParams(location.search).get('showcaseDemo') === '1') {
+  const stores = new WeakMap();
+  const getStore = storage => {
+    if (!stores.has(storage)) stores.set(storage, new Map());
+    return stores.get(storage);
+  };
+  Storage.prototype.getItem = function (key) { return getStore(this).get(String(key)) ?? null; };
+  Storage.prototype.setItem = function (key, value) { getStore(this).set(String(key), String(value)); };
+  Storage.prototype.removeItem = function (key) { getStore(this).delete(String(key)); };
+  Storage.prototype.clear = function () { getStore(this).clear(); };
+}
+</script>
 </head>
 <body>
 <div class="app">
@@ -45,5 +59,6 @@
 <div class="overlay" id="overlay" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="modalTitle"><div class="modal-content" id="modalContent"></div></section></div>
 <div class="alert" id="toast" role="status" aria-live="polite" hidden></div>
 <script type="module" src="./src/main.js"></script>
+<script type="module" src="./src/showcase.js"></script>
 </body>
 </html>
