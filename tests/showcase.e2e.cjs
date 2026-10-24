@@ -34,6 +34,11 @@ async function main() {
           introStatus: document.querySelector('#bloom-showcase [data-sub]')?.textContent,
           errors: win?.document?.querySelector('#error')?.textContent?.slice(0,1000),
           modal: win?.document?.querySelector('#modalContent')?.textContent?.slice(0,200),
+          startDisabled: win?.document?.querySelector('#startBtn')?.disabled,
+          startStatus: win?.document?.querySelector('#startStatus')?.textContent,
+          audio: win?.BloomHatchery?.inspect?.().audio,
+          gameTime: win?.BloomHatchery?.inspect?.().simulation?.time,
+          hostTime: document.querySelector('#bloom-showcase [data-time]')?.textContent,
           version: win?.document?.querySelector('.version')?.textContent,
         };
       });
