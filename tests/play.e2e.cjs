@@ -46,7 +46,21 @@ async function main(){
   await page.click('#soundBtn');if(touch){await page.locator('[data-sound-pane="clips"]').waitFor({state:'visible'});await page.click('[data-sound-pane="clips"]')}await page.locator('[data-sound="air_hiss"]').waitFor({state:'visible'});await page.click('[data-sound="air_hiss"]');await page.waitForTimeout(70);result.audioPeak=Math.max(result.audioPeak||0,await page.evaluate(()=>BloomHatchery.sampleAudio()));state=await inspect();assert.equal(state.audio.loaded,20);assert.equal(state.audio.state,'running');assert.ok(state.audio.metrics.clips.air_hiss>0);assert.ok(state.audio.metrics.clips.air_puff>0);pass(mode+' real audio buffers and playback',{loaded:state.audio.loaded,clips:state.audio.metrics.clips,peak:result.audioPeak});
   await page.click('[data-close]');await page.click('#pauseBtn');const pause=await inspect();if(touch)await page.clock.runFor(400);else await page.waitForTimeout(400);assert.equal((await inspect()).simulation.time,pause.simulation.time);await page.click('#resumeBtn');if(touch)await page.clock.runFor(100);else await page.waitForTimeout(100);assert.ok((await inspect()).simulation.time>pause.simulation.time);pass(mode+' pause/resume without catch-up');
   await page.reload();await page.waitForFunction(()=>!!window.BloomHatchery);state=await inspect();assert.equal(state.profile.records.hatches,0);assert.equal(state.profile.shells,0);assert.deepEqual(state.errors,[],'No application render errors');pass(mode+' practice remains unsaved after reload');
-  if(!touch){await startWithSeed('#startBtn');await page.waitForFunction(()=>BloomHatchery.inspect().simulation.enemies>0,{},{timeout:15000});pass('defense wave runs with real simulation');}
+  if(!touch){
+    await startWithSeed('#startBtn');
+    await page.waitForFunction(()=>BloomHatchery.inspect().simulation.enemies>0,{},{timeout:15000});
+    pass('defense wave runs with real simulation');
+    await page.click('#pauseBtn');
+    await page.click('[data-home]');
+    assert.equal(await page.locator('[data-confirm-home]').isVisible(),true,'Leaving a live defense run must require confirmation');
+    assert.equal((await inspect()).simulation.state,'paused','Quit confirmation must not advance the wave');
+    await page.keyboard.press('Escape');
+    assert.equal((await inspect()).simulation.state,'paused','Escape returns to pause instead of resuming behind the modal');
+    assert.equal(await page.locator('#resumeBtn').isVisible(),true);
+    await page.click('#resumeBtn');
+    assert.equal((await inspect()).simulation.state,'running');
+    pass('defense quit confirmation is reversible, including Escape');
+   }
   await context.close();
  }
  assert.ok(result.audioPeak>0,'Audio analyser must observe nonzero samples');assert.deepEqual(result.errors,[]);assert.deepEqual(result.glErrors,[],'No WebGL errors');pass('no page or WebGL errors');result.status='PASS';

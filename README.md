@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.15.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.17.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
