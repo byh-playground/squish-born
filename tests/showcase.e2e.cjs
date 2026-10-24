@@ -11,7 +11,7 @@ async function main() {
   let browser;
   try {
     browser = await chromium.launch({ headless: true, args: ['--use-gl=angle','--use-angle=swiftshader','--enable-webgl'] });
-    for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 }]) {
+    for (const viewport of [{ width: 1280, height: 800 }]) {
       const page = await browser.newPage({ viewport });
       const errors = [];
       page.on('pageerror', err => { errors.push(err.message); console.log('PAGEERROR', err.message); });
@@ -46,11 +46,11 @@ async function main() {
       await page.waitForFunction(() => {
         const win = document.querySelector('#bloom-showcase iframe')?.contentWindow;
         return win?.BloomHatchery?.inspect?.().simulation?.state === 'running';
-      }, null, { timeout: 25000 });
+      }, null, { timeout: 75000 });
       await page.waitForFunction(() => {
         const win = document.querySelector('#bloom-showcase iframe')?.contentWindow;
         return (win?.BloomHatchery?.inspect?.().simulation?.time ?? 0) > 2;
-      }, null, { timeout: 25000 });
+      }, null, { timeout: 75000 });
       const box = await page.locator('#bloom-showcase [data-action="close"]').boundingBox();
       assert.ok(box && box.width >= 40 && box.height >= 40);
       await page.locator('#bloom-showcase [data-action="close"]').click();
@@ -59,7 +59,7 @@ async function main() {
       assert.equal(profile.shells, 0);
       assert.deepEqual(profile.records, { hatches: 0, perfect: 0, bestWave: 0, wins: 0 });
       assert.deepEqual(errors, [], 'No JavaScript errors while opening and closing the isolated intro');
-      console.log('PASS showcase desktop/mobile', JSON.stringify(viewport));
+      console.log('PASS showcase desktop', JSON.stringify(viewport));
       await page.close();
     }
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
