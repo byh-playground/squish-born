@@ -46,7 +46,7 @@ const AUDIO_DATA = {"crack_dry":"UklGRsRBAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABA
  * Material-integrated reliefs use exact hit-test points; misplacement forgiveness does not alter timing judgement.
  * Official GameKit input/simloop embedded; no runtime CDN, image or audio fetch.
  */
-const BUILD = {version:'0.17.0', id:'20261016-squish-svg-gamekit-010', name:'꾹꾹 디펜스 / Squish Born'};
+const BUILD = {version:'0.17.1', id:'20261024-squish-indie-beta-ux-01', name:'꾹꾹 디펜스 / Squish Born'};
 const Config = {
  clock:{step:1/60,maxFrame:.12,maxSteps:8},
  world:{width:540,height:470,lanes:[133,270,407],nest:{x:270,y:404}},
