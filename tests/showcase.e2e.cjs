@@ -14,11 +14,30 @@ async function main() {
     for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 }]) {
       const page = await browser.newPage({ viewport });
       const errors = [];
-      page.on('pageerror', err => errors.push(err.message));
+      page.on('pageerror', err => { errors.push(err.message); console.log('PAGEERROR', err.message); });
+      page.on('console', msg => { if (msg.type() === 'error' || msg.type() === 'warning') console.log('BROWSER', msg.type(), msg.text().slice(0, 350)); });
+      page.on('requestfailed', req => console.log('REQUESTFAILED', req.url().slice(0,170), req.failure()?.errorText));
       const response = await page.goto(url, { waitUntil: 'load', timeout: 40000 });
       assert.equal(response.status(), 200);
       await page.locator('#bloom-showcase:not([hidden])').waitFor({ state: 'visible', timeout: 28000 });
       await page.locator('#bloom-showcase iframe').waitFor({ state: 'attached' });
+      await page.waitForTimeout(3000);
+      const diagnostics = await page.evaluate(() => {
+        const frame = document.querySelector('#bloom-showcase iframe');
+        const win = frame?.contentWindow;
+        let snapshot = null;
+        try { snapshot = win?.BloomHatchery?.inspect?.().simulation?.state || null; } catch (error) { snapshot = 'ERR:' + error.message; }
+        return {
+          frame: frame?.src,
+          state: snapshot,
+          frameTitle: win?.document?.title,
+          introStatus: document.querySelector('#bloom-showcase [data-sub]')?.textContent,
+          errors: win?.document?.querySelector('#error')?.textContent?.slice(0,1000),
+          modal: win?.document?.querySelector('#modalContent')?.textContent?.slice(0,200),
+          version: win?.document?.querySelector('.version')?.textContent,
+        };
+      });
+      console.log('SHOWCASE_PROBE', JSON.stringify(diagnostics));
       await page.waitForFunction(() => {
         const win = document.querySelector('#bloom-showcase iframe')?.contentWindow;
         return win?.BloomHatchery?.inspect?.().simulation?.state === 'running';
