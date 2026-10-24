@@ -5,7 +5,7 @@ function perform(name, win) {
     const api = win.BloomHatchery;
     if (!api) return false;
     const egg = api.inspect().simulation.eggs[0];
-    if (!egg || egg.state !== 'ready' && egg.state !== 'fresh' && egg.state !== 'active') return true;
+    if (!egg || egg.state !== 'sealed' || egg.press) return true;
     const best = egg.best;
     const duration = REAL_KEYS[egg.material] || Math.min(1100, Math.max(140, Math.round((best?.threshold || 0.54) * 1000 + 35)));
     const input = down => win.document.dispatchEvent(new win.KeyboardEvent(down ? 'keydown' : 'keyup', {key:' ', code:'Space', bubbles:true, cancelable:true}));
