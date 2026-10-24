@@ -13,7 +13,7 @@ function perform(name, win) {
     win.setTimeout(() => input(false), duration);
     return true;
 }
-installShowcase({
+const SHOWCASE = installShowcase({
     title:'꾹꾹 디펜스',
     launcher:'#startBtn',
     playSelector:'#startBtn',
@@ -99,3 +99,8 @@ installShowcase({
   }
 ]
 });
+
+// Restore direct introduction links after the game's own menu router has booted.
+if (window.__BLOOM_SHOWCASE_DEEPLINK && SHOWCASE) {
+    window.addEventListener('load', () => SHOWCASE.open(), { once: true });
+}
