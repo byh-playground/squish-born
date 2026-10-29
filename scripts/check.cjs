@@ -17,10 +17,10 @@ const publishedModules = new Map(officialManifest.modules.map(module => [module.
 for (const module of pin.modules) {
   if (publishedModules.get(module.path) !== module.sha256) throw new Error('Pinned GameKit module hash differs from the official manifest: ' + module.name);
 }
-if (pin.tag !== 'v0.14.3' || pin.sourceCommit !== 'dd59a57fcf66409cef16632ffb433c0b760324fa'
-    || pin.distCommit !== '418e17c455db56d6ed073d82d115191d9dd8bf04'
-    || pin.officialManifestSha256 !== '20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e') {
-  throw new Error('GameKit 0.14.3 SDK provenance pin mismatch');
+if (pin.tag !== 'v0.26.2' || pin.sourceCommit !== '81c1d1bc38518ef8a2b7dc84a8475374d1e716ed'
+    || pin.distCommit !== 'da87816c348724f08434371be8b899f1d21bc18c'
+    || pin.officialManifestSha256 !== '9709f4da1a798e9595ab2ec54ca8f8acf98131cb89cad04c96de704dadd84916') {
+  throw new Error('GameKit 0.26.2 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
   if (!source.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
@@ -52,11 +52,14 @@ if (!source.includes('createVectorAssetLoader({maxEntries:32})') || !source.incl
     || !source.includes('includeSourcePaths:true') || !source.includes("new URL('assets/svg/manifest.json'")) {
   throw new Error('Game must verify and compile authored SVGs once through the pinned browser loader');
 }
-if (!source.includes('const shaderSurfaces=asset.geometry.shaderSurfaces??[]')) throw new Error('Asset validation must treat assets without shader styles as ordinary meshes');
-if (!source.includes('YarnSurfaceRenderer') || !source.includes('new YarnSurfaceRenderer(device)')
-    || !source.includes('createVectorAsset(rig.meshRenderer,compiled,{surfaceRenderer:rig.surfaceRenderer})')
-    || !source.includes('system.surfaceRenderer.dispose()')) {
-  throw new Error('GameKit yarn shader surfaces must use and dispose the shared renderer per canvas');
+if (!source.includes('Boolean(asset.geometry.materials)!==(authored.length>0)')) throw new Error('Asset validation must match material surfaces to the authored yarn/sketch styles');
+if (!source.includes('new VectorContext(device,{initialVertices:8192,maxVertices:262144})')
+    || !source.includes('createVectorActor(rig.context,compiled,') || !source.includes('context.drawVectorActor(')
+    || !source.includes('system.raw.dispose();system.device.dispose()')) {
+  throw new Error('Each canvas must draw through one WebGLDevice + VectorContext and createVectorActor, and dispose both');
+}
+if (/YarnSurfaceRenderer|MeshRenderer|VectorRenderer|createVectorAsset|createPlayer|surfaceRenderer/.test(source)) {
+  throw new Error('Retired GameKit renderer APIs must not be referenced');
 }
 if (!source.includes('function multiplyAffine(a,b)')) throw new Error('Sprite asset drawing must compose canvas and SVG transforms');
 const appScript = source;
@@ -65,4 +68,4 @@ new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw new Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['--test', 'tests/gradient-adapter.test.mjs', 'tests/painter-order-contract.test.mjs'], { stdio: 'inherit' });
-console.log('GameKit 0.14.3 provenance, source SVG hashes, startup loader contract, and application ESM verified');
+console.log('GameKit 0.26.2 provenance, source SVG hashes, startup loader contract, and application ESM verified');

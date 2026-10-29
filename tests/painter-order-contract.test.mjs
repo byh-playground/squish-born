@@ -29,7 +29,7 @@ test('the pinned shared browser loader compiles once at startup and verifies eac
   assert.doesNotMatch(html, /compileVectorAssetFile|compiledAssetModuleSource|assets\/compiled/);
 });
 
-test('shader surfaces and authored SVG layer order stay with the GameKit asset player', () => {
+test('shader surfaces and authored SVG layer order stay with the GameKit vector actor', () => {
   for (const item of manifest.assets) {
     const source = readFileSync(new URL('../' + item.path, import.meta.url), 'utf8');
     const encoded = source.match(/<metadata id="vector-asset">([\s\S]*?)<\/metadata>/)?.[1];
@@ -40,11 +40,11 @@ test('shader surfaces and authored SVG layer order stay with the GameKit asset p
       if (style.kind === 'yarn' || style.kind === 'sketch') assert.equal(style.backend, 'shader', `${item.path}: shader backend must be authored in the SVG`);
     }
   }
-  assert.match(html, /record\.player\.draw\(\{projection:context\.vector\.projection,matrix/);
-  assert.match(html, /new YarnSurfaceRenderer\(device\)/);
-  assert.match(html, /surfaceRenderer:rig\.surfaceRenderer/);
-  assert.match(html, /system\.surfaceRenderer\.dispose\(\)/);
-  assert.doesNotMatch(html, /\.drawSurface\(/);
+  assert.match(html, /new VectorContext\(device,\{initialVertices:8192,maxVertices:262144\}\)/);
+  assert.match(html, /createVectorActor\(rig\.context,compiled,/);
+  assert.match(html, /context\.drawVectorActor\(record\.actor\.seek\(timeMs\),\{matrix/);
+  assert.match(html, /system\.raw\.dispose\(\);system\.device\.dispose\(\)/);
+  assert.doesNotMatch(html, /YarnSurfaceRenderer|MeshRenderer|VectorRenderer|createVectorAsset|createPlayer|surfaceRenderer|\.drawSurface\(/);
   assert.match(html, /function multiplyAffine\(a,b\)/);
   assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });

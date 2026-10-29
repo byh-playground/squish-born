@@ -6,31 +6,31 @@
       "key": "enemy-boss",
       "id": "squish-enemy-boss",
       "path": "assets/svg/enemy-boss.svg",
-      "sha256": "1609a4c4881deb50894a66c6d6a0e216e162dc61f2579fac4057056633709099"
+      "sha256": "51e39e6d7b589fcb40b0651fe53539af6e33348a48331c6f541beb889320374b"
     },
     {
       "key": "enemy-brute",
       "id": "squish-enemy-brute",
       "path": "assets/svg/enemy-brute.svg",
-      "sha256": "deea6ce3976fdf7aae8608871bca21ce60ca5fd5e24228c2541516f165e33e7c"
+      "sha256": "02648a152fb9a57447ccd81d7da43ebe7080e9000f71d3efc2039a84af587e24"
     },
     {
       "key": "enemy-moss",
       "id": "squish-enemy-moss",
       "path": "assets/svg/enemy-moss.svg",
-      "sha256": "0bb5fa52cc526eeedf62225750e20dfe384e16081e159ad95534534dd9be7cb9"
+      "sha256": "807cabfae1cc3081a63758d4ed1af199b43659a029829997e9fa7a8230772cab"
     },
     {
       "key": "enemy-runner",
       "id": "squish-enemy-runner",
       "path": "assets/svg/enemy-runner.svg",
-      "sha256": "1a7557da089cb309327e58274b202bd0d7ea32de4f4168ecb81cffec421075cf"
+      "sha256": "b87dcf4e4fffc6470e4bf84d330ee794c61594c48a26b1bbb95ae0b60b7d287e"
     },
     {
       "key": "enemy-tangle",
       "id": "squish-enemy-tangle",
       "path": "assets/svg/enemy-tangle.svg",
-      "sha256": "1044d02a097772d07879c0a2efa8acfd0162a4276817b4d36c7ce5fccc68e087"
+      "sha256": "58b8d0b7777decf246a3297b9236cb184c03bde5dfb14443bfee5f0d7e73779a"
     },
     {
       "key": "field-background",
@@ -60,61 +60,61 @@
       "key": "unit-healer-gold",
       "id": "squish-unit-healer-gold",
       "path": "assets/svg/unit-healer-gold.svg",
-      "sha256": "110a0eb1391d5fe31e617dca1b11789f2625ccb91e9fa9778bc1e13410b42a8f"
+      "sha256": "26f5c33189deaec6b498275f1a2a49bab47cb38cae9cbdb6660aa72b1e99f5ef"
     },
     {
       "key": "unit-healer",
       "id": "squish-unit-healer",
       "path": "assets/svg/unit-healer.svg",
-      "sha256": "35629a8d84bf1fee4ad7b6e3dd215029029e2ffade8a8eb160c1f714e22faf6e"
+      "sha256": "1f11f7bf77d0ce00ed4f41145ab4c07ba3f7e180bd9a0ba3398d50fb54438f75"
     },
     {
       "key": "unit-mushroom-gold",
       "id": "squish-unit-mushroom-gold",
       "path": "assets/svg/unit-mushroom-gold.svg",
-      "sha256": "7aebebfb6318d5cdd9b280bed915700ad01d8b66adfc93b954d13ef31587eab5"
+      "sha256": "f47f631eb7287c8bb0acf6471e5e744f06b55e38c55fd2b75567bc7a14b2e567"
     },
     {
       "key": "unit-mushroom",
       "id": "squish-unit-mushroom",
       "path": "assets/svg/unit-mushroom.svg",
-      "sha256": "b83d44c277faca0a3079cdc5139bc5b5bcb3255fdec416842e141fd19a5cd12f"
+      "sha256": "f0cce3b1cc8941d96c897ba1d01af9f76c26547339359d775af6b1b9bca3bed7"
     },
     {
       "key": "unit-needle-gold",
       "id": "squish-unit-needle-gold",
       "path": "assets/svg/unit-needle-gold.svg",
-      "sha256": "5ebf323cfd4824ff33f9fbf9c5e73036f895ae93db8d9a2905b848ae81a9f7b2"
+      "sha256": "e05b5e7f470b6a39bdf298c28ec800d56165fbbf261191b6d4a634911c50d8a1"
     },
     {
       "key": "unit-needle",
       "id": "squish-unit-needle",
       "path": "assets/svg/unit-needle.svg",
-      "sha256": "9f03011dcc9c752e553fd2abc9e1e3f74215204126e99a24292a9bf3c8019b52"
+      "sha256": "b40ea6f6ac7ee94b982e723a389d3b508b462b60bf999d64a25202ae99ddfa50"
     },
     {
       "key": "unit-spore-gold",
       "id": "squish-unit-spore-gold",
       "path": "assets/svg/unit-spore-gold.svg",
-      "sha256": "a8a972abb8336276c38dd246ba86fde149cc3705661e7909d31c746794c9ceb6"
+      "sha256": "c83d37b16d280a74d773ce368a2efe561844a985cc05e97a8e4372cdb2e5e8ab"
     },
     {
       "key": "unit-spore",
       "id": "squish-unit-spore",
       "path": "assets/svg/unit-spore.svg",
-      "sha256": "b596940ed95630e69cddc21bbea603f8e35b17c1bfebcda8ab5eeacee75d8d16"
+      "sha256": "436338bd921fc81b010f35cf070f384742c5a067eeabfdac59a51cceadd42c59"
     },
     {
       "key": "unit-sprout-gold",
       "id": "squish-unit-sprout-gold",
       "path": "assets/svg/unit-sprout-gold.svg",
-      "sha256": "2e762eeb9dbdb6c7ece7d514e541992be44ed0d2d19600e40fc73bb3e798ad03"
+      "sha256": "701cd1071f95f003c285c25eb2b546abebd3639b5e5c8fb862f69f7e58ad1a08"
     },
     {
       "key": "unit-sprout",
       "id": "squish-unit-sprout",
       "path": "assets/svg/unit-sprout.svg",
-      "sha256": "3271e931d148c56f9c5b9fe6ada65229215b33c4654ae6c1d5cea2639e40f934"
+      "sha256": "575a07b078853149983d60ce098889b8aedc4d7483a19b02ddc304236f0d19b6"
     }
   ]
 }
