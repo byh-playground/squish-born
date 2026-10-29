@@ -45,7 +45,8 @@ test('shader surfaces and authored SVG layer order stay with the GameKit vector 
   assert.match(html, /context\.drawVectorActor\(record\.actor\.seek\(timeMs\),\{matrix/);
   assert.match(html, /system\.raw\.dispose\(\);system\.device\.dispose\(\)/);
   assert.doesNotMatch(html, /YarnSurfaceRenderer|MeshRenderer|VectorRenderer|createVectorAsset|createPlayer|surfaceRenderer|\.drawSurface\(/);
-  assert.match(html, /function multiplyAffine\(a,b\)/);
+  assert.doesNotMatch(html, /multiplyAffine/);
+  assert.match(html, /drawVectorActor\(record\.actor\.seek\(timeMs\),\{matrix:\[width\/vw/);
   assert.ok(readdirSync(new URL('../assets/', import.meta.url)).every(file => file !== 'compiled' && file !== 'gamekit'));
 });
 

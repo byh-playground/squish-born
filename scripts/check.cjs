@@ -17,10 +17,10 @@ const publishedModules = new Map(officialManifest.modules.map(module => [module.
 for (const module of pin.modules) {
   if (publishedModules.get(module.path) !== module.sha256) throw new Error('Pinned GameKit module hash differs from the official manifest: ' + module.name);
 }
-if (pin.tag !== 'v0.26.2' || pin.sourceCommit !== '81c1d1bc38518ef8a2b7dc84a8475374d1e716ed'
-    || pin.distCommit !== 'da87816c348724f08434371be8b899f1d21bc18c'
-    || pin.officialManifestSha256 !== '9709f4da1a798e9595ab2ec54ca8f8acf98131cb89cad04c96de704dadd84916') {
-  throw new Error('GameKit 0.26.2 SDK provenance pin mismatch');
+if (pin.tag !== 'v0.26.5' || pin.sourceCommit !== 'd287ca4e2268486b00a8155585b0bf6855f71f0d'
+    || pin.distCommit !== '6ef60d922541329af05e070b464caf66c970a041'
+    || pin.officialManifestSha256 !== 'd114896850e6f99d279bd80b549b0eb2c366b8ebd9afaa1f28d2c2dde9028130') {
+  throw new Error('GameKit 0.26.5 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
   if (!source.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
@@ -61,11 +61,11 @@ if (!source.includes('new VectorContext(device,{initialVertices:8192,maxVertices
 if (/YarnSurfaceRenderer|MeshRenderer|VectorRenderer|createVectorAsset|createPlayer|surfaceRenderer/.test(source)) {
   throw new Error('Retired GameKit renderer APIs must not be referenced');
 }
-if (!source.includes('function multiplyAffine(a,b)')) throw new Error('Sprite asset drawing must compose canvas and SVG transforms');
+if (source.includes('multiplyAffine') || !source.includes('{matrix:[width/vw,0,0,height/vh,')) throw new Error('Sprite drawing must pass only the SVG transform; the context composes camera, alpha and color');
 const appScript = source;
 if (!appScript) throw new Error('Application ESM script missing');
 new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw new Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['--test', 'tests/gradient-adapter.test.mjs', 'tests/painter-order-contract.test.mjs'], { stdio: 'inherit' });
-console.log('GameKit 0.26.2 provenance, source SVG hashes, startup loader contract, and application ESM verified');
+console.log('GameKit 0.26.5 provenance, source SVG hashes, startup loader contract, and application ESM verified');
