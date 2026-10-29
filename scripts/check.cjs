@@ -17,10 +17,10 @@ const publishedModules = new Map(officialManifest.modules.map(module => [module.
 for (const module of pin.modules) {
   if (publishedModules.get(module.path) !== module.sha256) throw new Error('Pinned GameKit module hash differs from the official manifest: ' + module.name);
 }
-if (pin.tag !== 'v0.26.5' || pin.sourceCommit !== 'd287ca4e2268486b00a8155585b0bf6855f71f0d'
-    || pin.distCommit !== '6ef60d922541329af05e070b464caf66c970a041'
-    || pin.officialManifestSha256 !== 'd114896850e6f99d279bd80b549b0eb2c366b8ebd9afaa1f28d2c2dde9028130') {
-  throw new Error('GameKit 0.26.5 SDK provenance pin mismatch');
+if (pin.tag !== 'v0.26.6' || pin.sourceCommit !== '88630ef4dea7fd3a7fd7aad22090fe74cb3a6fbc'
+    || pin.distCommit !== 'b83464e445efaf86d66499859d3d05463df2b22a'
+    || pin.officialManifestSha256 !== 'bb92d60e2f7f84397d9055f990ba99d6a4d61da2bf0c053acf90bf42dc379e53') {
+  throw new Error('GameKit 0.26.6 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
   if (!source.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
@@ -68,4 +68,4 @@ new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw new Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['--test', 'tests/gradient-adapter.test.mjs', 'tests/painter-order-contract.test.mjs'], { stdio: 'inherit' });
-console.log('GameKit 0.26.5 provenance, source SVG hashes, startup loader contract, and application ESM verified');
+console.log('GameKit 0.26.6 provenance, source SVG hashes, startup loader contract, and application ESM verified');
