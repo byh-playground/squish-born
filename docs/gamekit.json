@@ -1,25 +1,25 @@
 {
-  "tag": "v0.14.3",
-  "sourceCommit": "dd59a57fcf66409cef16632ffb433c0b760324fa",
-  "distCommit": "418e17c455db56d6ed073d82d115191d9dd8bf04",
-  "officialManifestSha256": "20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e",
+  "tag": "v0.26.5",
+  "sourceCommit": "d287ca4e2268486b00a8155585b0bf6855f71f0d",
+  "distCommit": "6ef60d922541329af05e070b464caf66c970a041",
+  "officialManifestSha256": "d114896850e6f99d279bd80b549b0eb2c366b8ebd9afaa1f28d2c2dde9028130",
   "modules": [
     {
       "name": "rendering",
       "path": "rendering.js",
-      "sha256": "021b11f83b49be3e94cfe0a67769dcd248b9463325b6dcc55ea4943a0ea6c18b",
+      "sha256": "5d6620b7ff04434c42883d51629cc1307eda7ae7135f06e1b6d60ee8ea5b63e4",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets",
       "path": "vector-assets.js",
-      "sha256": "288eadf3830df2836f0b103dc513a906b5b9dbd58660885c18b2a0941d0e877a",
+      "sha256": "de7093c51d5ffd80d6bd716a0023a9b78586a1a9b10d607eb730109ba1af694c",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets-loader",
       "path": "vector-assets-loader.js",
-      "sha256": "56042179b1b669d69d4791c5a1ad7bbd1927d8686fa4e9192504fb248c2170e2",
+      "sha256": "a9d9eaa61d891fb1dd9d7d8ac9d9781fe2545cc2a7f8ede6202556c2a7a2f48f",
       "delivery": "pinned CDN ESM"
     },
     {
@@ -42,6 +42,6 @@
     "assetManifestPath": "assets/svg/manifest.json",
     "assetCount": 19,
     "cacheEntries": 32,
-    "compilerSourceCommit": "dd59a57fcf66409cef16632ffb433c0b760324fa"
+    "compilerSourceCommit": "d287ca4e2268486b00a8155585b0bf6855f71f0d"
   }
 }
