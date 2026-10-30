@@ -1,0 +1,15 @@
+{
+  "$schema": "https://byh-playground.github.io/bloom-world/playground/bloom-game.schema.json",
+  "schemaVersion": 1,
+  "title": "꾹꾹 디펜스",
+  "en": "SQUISH BORN",
+  "genre": "simulation",
+  "tags": ["촉각 실험", "부화", "자동 디펜스"],
+  "desc": "볼을 눌렀다 놓아 동료를 부화시키고 정원을 지키는 디펜스 게임입니다.",
+  "points": [
+    "재질 9종과 서로 다른 입력 타이밍",
+    "동료를 부화시켜 정원 지키기",
+    "전투 없는 연습 모드도 지원"
+  ],
+  "showcase": "https://byh-playground.github.io/squish-born/#/showcase"
+}
