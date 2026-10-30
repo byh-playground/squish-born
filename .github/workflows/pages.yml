@@ -22,6 +22,7 @@ jobs:
       - run: npm run check
       - run: mkdir -p _site && cp index.html _site/index.html && cp -R src _site/src && cp -R assets _site/assets
       - name: Publish bloom-game.json with the Nightly tag name
+        if: hashFiles('_site/index.html') != ''
         run: |
           curl -fsS https://raw.githubusercontent.com/byh-playground/bloom-world/main/playground/bloom-game.schema.json -o "$RUNNER_TEMP/schema.json"
           STAMP=$(date -u -d "@$(git show -s --format=%ct "$GITHUB_SHA")" +%Y%m%dT%H%M%SZ)
