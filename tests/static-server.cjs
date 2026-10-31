@@ -10,6 +10,7 @@ const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.png', 'image/png'],
   ['.woff2', 'font/woff2'],
+  ['.webmanifest', 'application/manifest+json'],
 ]);
 
 module.exports = function createStaticServer({ root, html } = {}) {

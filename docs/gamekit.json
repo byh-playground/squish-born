@@ -1,8 +1,8 @@
 {
-  "tag": "v0.39.0",
-  "sourceCommit": "d5c35c3d4fec366e672c9a5889104ea47a300683",
-  "distCommit": "1a3ef3877dea431268c712cbe7b13b2600826119",
-  "officialManifestSha256": "ef220fd3801549c88b0044c2bcfa92f4a7de40ce49626e0199ed8e5b1a58f2c0",
+  "tag": "v0.39.1",
+  "sourceCommit": "47d9ec102622c84fb6fb66121eab74e8e91fd862",
+  "distCommit": "fcd3a02db452b2e469898b05aa797d754a89fb76",
+  "officialManifestSha256": "049171e4b5cd21e07083cc096f3e50aa7bc01f4d4f822e0bd9fc880cfb48c172",
   "modules": [
     {
       "name": "rendering",
@@ -29,6 +29,12 @@
       "delivery": "pinned CDN ESM"
     },
     {
+      "name": "pwa",
+      "path": "pwa.js",
+      "sha256": "4f30dd7b16ca3d56f7cbeee4f6e17ff7d7ef04d8aacefaea0af93bd2f6afec8f",
+      "delivery": "pinned CDN ESM"
+    },
+    {
       "name": "input",
       "path": "input.js",
       "sha256": "a969755a39702723b35b6a1503e9b2e53a431ea91845017474c979752fdfb51f",
@@ -41,6 +47,14 @@
       "sha256": "c25a8f7f4999e4fe8beb6b08167fa4d0934c34098db2bf912335e81db53c4ef8",
       "bytes": 57952,
       "delivery": "pinned embedded ESM"
+    },
+    {
+      "name": "pwa-build",
+      "path": "pwa-build.mjs",
+      "sha256": "dc00f87aa0194ec9721b1949888c310c219238fb9c2562704300d3cbd0003858",
+      "bytes": 19077,
+      "delivery": "vendored Node tool",
+      "localPath": "scripts/vendor/gamekit/pwa-build.mjs"
     }
   ],
   "vectorAssets": {
@@ -48,6 +62,6 @@
     "assetManifestPath": "assets/svg/manifest.json",
     "assetCount": 19,
     "cacheEntries": 32,
-    "compilerSourceCommit": "d5c35c3d4fec366e672c9a5889104ea47a300683"
+    "compilerSourceCommit": "47d9ec102622c84fb6fb66121eab74e8e91fd862"
   }
 }

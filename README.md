@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.18.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.19.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -28,6 +28,15 @@ npm run test:mobile-pages
 ```
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
+
+## 0.19.0 · 설치·오프라인 실행(PWA) · GameKit v0.39.1
+
+- 한 번 방문하면 그다음부터는 오프라인으로도 시작합니다. GameKit `pwa` 모듈의 생성기(`scripts/vendor/gamekit/pwa-build.mjs`, dist `fcd3a02`에서 받은 그대로이며 sha256은 `docs/gamekit.json`과 `npm run check`가 확인)를 `node scripts/pwa.mjs`로 실행해 `manifest.webmanifest`·`pwa/*.png`(아이콘 192·512·maskable·apple-touch, 공유 이미지 1200×630)·`sw.js`·`index.html`의 `bloom-pwa` 마커 사이 태그를 만들고 결과를 커밋합니다. 원본 그림은 `assets/pwa/*.svg`(게임 SVG에서 옮긴 바위갓·동료·둥지, 글자는 Noto Sans KR 윤곽선)입니다.
+- `npm run check`는 `node scripts/pwa.mjs --check`도 돌려, 원본(index.html·src·SVG·그림)을 고치고 생성기를 다시 돌리지 않았으면 실패합니다. Pages 배포는 `sw.js`·`manifest.webmanifest`·`pwa/`도 함께 올립니다.
+- 새 버전이 배포되어 기다리면 하단 알림에 **새 버전이 준비됐어요 · 새로 고침**이 남고, 누르면 새 버전으로 다시 읽습니다. 등록에 실패하면 같은 알림 자리에 이유를 보입니다.
+- 브라우저가 설치를 허락하면(`beforeinstallprompt`) 처음 화면의 **전투 없이 왁뿌 연습** 옆에 **홈 화면에 설치**가 나타납니다.
+- 소개 장면(`?showcaseDemo=1` iframe)은 service worker를 등록하지 않습니다. 시작에 필요한 다른 origin 주소는 커밋 고정 GameKit 모듈뿐이며 생성기가 precache합니다.
+- 모든 GameKit 모듈을 dist `fcd3a02`(v0.39.1, 소스 `47d9ec10`) 하나로 올리고 `pwa.js`를 더했습니다. 옛 핀과 바이트가 다른 기존 모듈은 이 게임이 쓰지 않는 `rollback.js`(버전 문자열)뿐이고, v0.39.1은 호환 추가라 Breaking이 없습니다.
 
 ## 0.18.1 · 읽지 못한 기록에서 새로 시작 · GameKit v0.39.0
 

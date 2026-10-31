@@ -17,13 +17,17 @@ const publishedModules = new Map(officialManifest.modules.map(module => [module.
 for (const module of pin.modules) {
   if (publishedModules.get(module.path) !== module.sha256) throw new Error('Pinned GameKit module hash differs from the official manifest: ' + module.name);
 }
-if (pin.tag !== 'v0.39.0' || pin.sourceCommit !== 'd5c35c3d4fec366e672c9a5889104ea47a300683'
-    || pin.distCommit !== '1a3ef3877dea431268c712cbe7b13b2600826119'
-    || pin.officialManifestSha256 !== 'ef220fd3801549c88b0044c2bcfa92f4a7de40ce49626e0199ed8e5b1a58f2c0') {
-  throw new Error('GameKit 0.39.0 SDK provenance pin mismatch');
+if (pin.tag !== 'v0.39.1' || pin.sourceCommit !== '47d9ec102622c84fb6fb66121eab74e8e91fd862'
+    || pin.distCommit !== 'fcd3a02db452b2e469898b05aa797d754a89fb76'
+    || pin.officialManifestSha256 !== '049171e4b5cd21e07083cc096f3e50aa7bc01f4d4f822e0bd9fc880cfb48c172') {
+  throw new Error('GameKit 0.39.1 SDK provenance pin mismatch');
 }
 for (const module of pin.modules.filter(item => item.delivery === 'pinned CDN ESM')) {
   if (!source.includes(dist + module.path)) throw new Error('Pinned CDN SDK module is missing: ' + module.name);
+}
+for (const tool of pin.modules.filter(item => item.delivery === 'vendored Node tool')) {
+  const bytes = fs.readFileSync(tool.localPath);
+  if (hash(bytes) !== tool.sha256 || bytes.byteLength !== tool.bytes) throw new Error('Vendored GameKit tool differs from the pinned dist file: ' + tool.localPath);
 }
 const embedded = pin.modules.filter(item => item.delivery === 'pinned embedded ESM');
 const dataModules = [...source.matchAll(/import\('data:text\/javascript;base64,([^']+)'\)/g)];
@@ -71,4 +75,6 @@ new vm.SourceTextModule(appScript);
 if (/getContext\(["']2d["']\)|<canvas[^>]*data-portrait|<canvas[^>]*id=["']hero/i.test(html)) throw new Error('Canvas2D or raster portrait remains in the product page');
 if (/<image\b|data:image\//i.test(html)) throw new Error('Raster image resource found in product page');
 execFileSync(process.execPath, ['--test', 'tests/gradient-adapter.test.mjs', 'tests/painter-order-contract.test.mjs'], { stdio: 'inherit' });
-console.log('GameKit 0.39.0 provenance, source SVG hashes, startup loader contract, and application ESM verified');
+// Generated PWA files (manifest, icons, share image, sw.js, <head> tags) must match their sources before a deploy.
+execFileSync(process.execPath, ['scripts/pwa.mjs', '--check'], { stdio: 'inherit' });
+console.log('GameKit 0.39.1 provenance, source SVG hashes, startup loader contract, application ESM, and generated PWA files verified');
