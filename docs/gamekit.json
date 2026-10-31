@@ -1,8 +1,8 @@
 {
-  "tag": "v0.37.6",
-  "sourceCommit": "9beed252a85e3dc0a121203aee5559bfbdee3288",
-  "distCommit": "53361a10c66cec705a15e7857831a4c21537e592",
-  "officialManifestSha256": "168b283150cb0db4aecfa3227f47b72df7dd781756b49d550b29891f1c1d0417",
+  "tag": "v0.39.0",
+  "sourceCommit": "d5c35c3d4fec366e672c9a5889104ea47a300683",
+  "distCommit": "1a3ef3877dea431268c712cbe7b13b2600826119",
+  "officialManifestSha256": "ef220fd3801549c88b0044c2bcfa92f4a7de40ce49626e0199ed8e5b1a58f2c0",
   "modules": [
     {
       "name": "rendering",
@@ -25,7 +25,7 @@
     {
       "name": "save",
       "path": "save.js",
-      "sha256": "cda1b1231df67104b9a3d8a1b07fa3303cb9881f19522f7c0de48c11dce6a75f",
+      "sha256": "50164b43313c93dca7ebf076456a3b319b0825a0b5c6f5712af8d3286d604cfc",
       "delivery": "pinned CDN ESM"
     },
     {
@@ -48,6 +48,6 @@
     "assetManifestPath": "assets/svg/manifest.json",
     "assetCount": 19,
     "cacheEntries": 32,
-    "compilerSourceCommit": "9beed252a85e3dc0a121203aee5559bfbdee3288"
+    "compilerSourceCommit": "d5c35c3d4fec366e672c9a5889104ea47a300683"
   }
 }
