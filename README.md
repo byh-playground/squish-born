@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.17.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.18.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -29,9 +29,18 @@ npm run test:mobile-pages
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
 
+## 0.18.0 · 기록을 GameKit save로 보관
+
+도감·조개·영구 성장·설정은 GameKit **v0.37.6** `save` 모듈의 레코드 하나(`squish-born.profile`, localStorage 어댑터)에 저장합니다. 옛 키 `bloom.waxHatchery.profile`은 읽지도 옮기지도 않으므로 이전 기록은 처음부터 시작합니다. 게임은 기록을 연 뒤에 시작합니다.
+
+- 저장된 기록이 깨졌거나 형식이 틀리면 빈 기록으로 바꾸지 않습니다. "저장된 기록을 읽지 못했어요" 화면을 보여 주고 게임을 시작하지 않으며 원본을 그대로 둡니다.
+- 저장소 오류(권한·공간)나 다른 탭과의 충돌로 쓰지 못하면 알림과 하단 저장 안내로 알립니다. 충돌이면 최신 기록을 다시 읽습니다. 구매는 저장이 끝난 뒤에만 확정됩니다.
+- 소개 장면(`?showcaseDemo=1` iframe)은 메모리 어댑터로 열려 실제 기록을 읽거나 쓰지 않습니다. 브라우저 Storage를 가로채던 우회는 삭제했습니다.
+- 같은 dist 커밋 `53361a10`으로 rendering·vector-assets-loader도 올렸습니다. 차이는 스케치 에코(v0.37.0/1)와 스프라이트 이름(v0.36.0)뿐이며 이 게임은 둘 다 쓰지 않습니다.
+
 ## 0.15.1 — Browser-startup SVG compilation
 
-Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit 0.26.6 browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; each canvas owns one `WebGLDevice` and one `VectorContext`, and `createVectorActor(context, compiled, options)` actors draw the resulting geometry (yarn and sketch surfaces are materials of the actor mesh; the game creates no renderer of its own). No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 2; simulation and sorting remain in the game.
+Squish keeps its authored field, hatch, characters, nest, and kneading skin as the 19 original SVG files in `assets/svg/`. On the first game load, the pinned shared GameKit browser loader verifies each source SHA-256, compiles retained geometry once, and caches it for gameplay. Metadata still owns parts, pivots, sockets, expressions, clips, shader surfaces, and paint order; each canvas owns one `WebGLDevice` and one `VectorContext`, and `createVectorActor(context, compiled, options)` actors draw the resulting geometry (yarn and sketch surfaces are materials of the actor mesh; the game creates no renderer of its own). No generated vertex/index arrays, base64 mesh modules, local copy of the shared compiler, PNG, canvas texture, or rasterized SVG artwork is shipped. The gameplay canvases use GameKit WebGL 2; simulation and sorting remain in the game.
 
 The deploy requires `index.html`, the authored `src/` modules/styles, and the original SVG directory/manifest. Run `npm run check` to verify the SDK pin, source hashes, and startup-loader contract. CI checks source/SDK/asset integrity without a deploy build. Full browser scenarios and visual comparisons remain available via manual workflow dispatch.
 
