@@ -129,3 +129,8 @@
  .run-record dt{font-size:10px}
  .run-record dd{font-size:15px}
 }
+
+/* PWA: the update notice keeps one action button; the intro install button appears only when the browser allows installing. */
+.alert.actionable{pointer-events:auto;display:flex;align-items:center;gap:12px}
+.alert.actionable button{border:1px solid #fff8e855;border-radius:9px;background:#fff8e81f;color:#fff8e8;font-weight:700;padding:7px 12px;min-height:36px}
+.intro-quiet{display:flex;justify-content:center;flex-wrap:wrap;column-gap:18px}

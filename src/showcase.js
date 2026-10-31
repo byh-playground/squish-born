@@ -1,4 +1,4 @@
-import { installShowcase } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@1a3ef3877dea431268c712cbe7b13b2600826119/scenario.js';
+import { installShowcase } from 'https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@fcd3a02db452b2e469898b05aa797d754a89fb76/scenario.js';
 const REAL_KEYS = {bubble:80,keyboard:75,honey:75,chocolate:75,soda:75,butter:90};
 function perform(name, win) {
     if (name !== 'hatch') return true;

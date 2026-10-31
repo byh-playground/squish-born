@@ -1,0 +1,32 @@
+{
+  "id": "./",
+  "name": "꾹꾹 디펜스 / Squish Born",
+  "short_name": "꾹꾹 디펜스",
+  "description": "볼을 눌렀다 놓아 털실 동료를 부화시키고 작은 정원을 지키는 디펜스 게임입니다.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3eee4",
+  "theme_color": "#f3eee4",
+  "icons": [
+    {
+      "src": "pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
