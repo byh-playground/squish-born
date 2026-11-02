@@ -1,37 +1,37 @@
 {
-  "tag": "v0.39.1",
-  "sourceCommit": "47d9ec102622c84fb6fb66121eab74e8e91fd862",
-  "distCommit": "fcd3a02db452b2e469898b05aa797d754a89fb76",
-  "officialManifestSha256": "049171e4b5cd21e07083cc096f3e50aa7bc01f4d4f822e0bd9fc880cfb48c172",
+  "tag": "v0.41.3",
+  "sourceCommit": "bb3f59614c8d4da8188a3ffdc2eff43314fabe5f",
+  "distCommit": "c819a0b48fb650ee8222f7d5ea90a63a2b9306d1",
+  "officialManifestSha256": "d9c141ee18be4ce7a33cc8c39bdba75d5cd76e0b8ecdf7c2038386bc75cd9851",
   "modules": [
     {
       "name": "rendering",
       "path": "rendering.js",
-      "sha256": "cf39f38e1644e2fdca168ee17ce556f09bddb05bfa4e8e89c310ce116d62d97e",
+      "sha256": "08a110906c3a249c892685940ff79b3ebe7bc34afe36f4c5d6b7b056572ccf8b",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets",
       "path": "vector-assets.js",
-      "sha256": "de7093c51d5ffd80d6bd716a0023a9b78586a1a9b10d607eb730109ba1af694c",
+      "sha256": "b3e6a20d29368985770e175ecb015da18c1ed00796d965e0b140051f61fceadf",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "vector-assets-loader",
       "path": "vector-assets-loader.js",
-      "sha256": "277a44071e6c7294a14081cfcf2f8cf0e8f9fc72c7c67b40be20bbfb14966e03",
+      "sha256": "f53c266c4bff3e79c0a6341b8e1c68525507199a920c7d6a97936ebc84ca6da9",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "save",
       "path": "save.js",
-      "sha256": "50164b43313c93dca7ebf076456a3b319b0825a0b5c6f5712af8d3286d604cfc",
+      "sha256": "540b2af25e91bd6b5683c3ae8f80484a951baea9dc90452233dd72c26a4696ed",
       "delivery": "pinned CDN ESM"
     },
     {
       "name": "pwa",
       "path": "pwa.js",
-      "sha256": "4f30dd7b16ca3d56f7cbeee4f6e17ff7d7ef04d8aacefaea0af93bd2f6afec8f",
+      "sha256": "295b5918d9c6c92d2b973496019bb4c108dd36372ea93af55d1e5eccb4259b97",
       "delivery": "pinned CDN ESM"
     },
     {
@@ -51,8 +51,8 @@
     {
       "name": "pwa-build",
       "path": "pwa-build.mjs",
-      "sha256": "dc00f87aa0194ec9721b1949888c310c219238fb9c2562704300d3cbd0003858",
-      "bytes": 19077,
+      "sha256": "f4f213c2bec77e4cce2c6fa64434d127b09d382f75b487c9a55750bac1bea80f",
+      "bytes": 15913,
       "delivery": "vendored Node tool",
       "localPath": "scripts/vendor/gamekit/pwa-build.mjs"
     }
@@ -62,6 +62,6 @@
     "assetManifestPath": "assets/svg/manifest.json",
     "assetCount": 19,
     "cacheEntries": 32,
-    "compilerSourceCommit": "47d9ec102622c84fb6fb66121eab74e8e91fd862"
+    "compilerSourceCommit": "bb3f59614c8d4da8188a3ffdc2eff43314fabe5f"
   }
 }
