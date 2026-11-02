@@ -2,7 +2,7 @@
 
 재질마다 다른 볼을 누르고 떼어 털실 동료를 부화시키고, 작은 정원을 지키는 자동 디펜스입니다. 바삭·쪼물·팝·버터·키캡·꿀·초콜릿·탄산·공기빼기 9종을 만지며 Good·Perfect·무결점 보상과 동료 도감을 모읍니다.
 
-**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.19.0** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
+**[바로 플레이 · Play](https://byh-playground.github.io/squish-born/)** · **0.19.1** · [단일 HTML 프리뷰](https://byh-playground.github.io/squish-born/index.html)
 
 ![털실 속성 동료 다섯 역할](docs/element-characters.png)
 
@@ -28,6 +28,13 @@ npm run test:mobile-pages
 ```
 
 Windows 검증은 설치된 Edge를 사용합니다. 다른 환경은 Playwright Chromium을 설치하고 BROWSER_CHANNEL=chromium을 지정합니다. TEST_URL로 공개 Pages에 같은 사용자 시나리오를 실행할 수 있습니다. 실행당 상한은 180초입니다.
+
+## 0.19.1 · 새로고침이 곧 최신 버전 · GameKit v0.41.3
+
+- 페이지를 읽거나 새로고침하면 항상 최신 배포를 엽니다. GameKit `pwa` v0.41.0에서 백그라운드 다운로드·대기 worker·업데이트 알림이 없어졌으므로 하단의 **새 버전이 준비됐어요 · 새로 고침** 알림과 그 버튼, 버튼을 그리던 알림 코드·스타일을 지웠습니다. 대신하는 알림은 없고, 이 게임에는 "업데이트 확인" 설정 항목이 없어 새로 더하지 않았습니다.
+- 생성 `sw.js`는 설치 때 아무것도 받지 않습니다. 같은 origin 파일은 매번 서버에 재확인(`no-cache`)하고 받은 사본을 오프라인용으로 둡니다. 그래서 오프라인 시작은 service worker가 제어한 상태로 한 번 읽은 뒤(두 번째 방문)부터입니다. `scripts/pwa.mjs`에서 없어진 `precache` 목록을 지웠습니다. 커밋 고정 GameKit 주소는 계속 cache-first입니다.
+- `<head>`의 `bloom-pwa` 마커 사이 태그는 v0.41.3 생성기가 Prettier 모양을 따르지만 따옴표 밖 공백·`/>` 차이를 같은 것으로 보므로 `index.html`은 다시 쓰이지 않았습니다. 이 저장소는 Prettier를 쓰지 않아 `.prettierignore`가 없습니다.
+- 모든 GameKit 모듈과 생성기 `pwa-build.mjs`를 dist `c819a0b`(v0.41.3, 소스 `bb3f5961`) 하나로 올렸습니다. 이 게임이 쓰는 것 중 바이트가 바뀐 것은 rendering·vector-assets·vector-assets-loader·save·pwa·pwa-build이며, input·simloop·scenario(소개)는 그대로입니다. 이 게임에 닿는 Breaking은 `pwa` v0.41.0뿐입니다. `save` v0.40.0(이관 오류를 `unreadable`로 감쌈)은 이 게임이 `migrate`를 쓰지 않아 영향이 없습니다. 새 모듈 `boot`(v0.41.1)·`i18n`(v0.41.2)은 쓰지 않습니다.
 
 ## 0.19.0 · 설치·오프라인 실행(PWA) · GameKit v0.39.1
 

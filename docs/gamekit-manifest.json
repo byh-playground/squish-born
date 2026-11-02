@@ -3,19 +3,19 @@
   "modules": [
     {
       "file": "interpolation.js",
-      "sha256": "acad7ad93615633609a62e484bff918980fc84282840db9b5cd108e8f5bb133a"
+      "sha256": "854e90343fba611d4f0d118048c33256624543c454c9134e0c4b5cd18d14a509"
     },
     {
       "file": "rendering.js",
-      "sha256": "cf39f38e1644e2fdca168ee17ce556f09bddb05bfa4e8e89c310ce116d62d97e"
+      "sha256": "08a110906c3a249c892685940ff79b3ebe7bc34afe36f4c5d6b7b056572ccf8b"
     },
     {
       "file": "vector-assets.js",
-      "sha256": "de7093c51d5ffd80d6bd716a0023a9b78586a1a9b10d607eb730109ba1af694c"
+      "sha256": "b3e6a20d29368985770e175ecb015da18c1ed00796d965e0b140051f61fceadf"
     },
     {
       "file": "vector-assets-loader.js",
-      "sha256": "277a44071e6c7294a14081cfcf2f8cf0e8f9fc72c7c67b40be20bbfb14966e03"
+      "sha256": "f53c266c4bff3e79c0a6341b8e1c68525507199a920c7d6a97936ebc84ca6da9"
     },
     {
       "file": "input.js",
@@ -35,7 +35,7 @@
     },
     {
       "file": "transport.js",
-      "sha256": "06361120228fe158e8751a1a703e7d38a4680a4e0f00d2473e4de8da2f4468af"
+      "sha256": "8f7f9d68a2be3b1c7839ab0f975178b0bed4f454496ad4e91a5c28e6e3f0a6d3"
     },
     {
       "file": "replay.js",
@@ -43,7 +43,7 @@
     },
     {
       "file": "rollback.js",
-      "sha256": "5789516f7b6fde24efa0b2033b916a34b8226ab4e3483457c4988a9ae085b0eb"
+      "sha256": "10a057e4d6e47e9d095ddfe323100e50f0e347d7f5db93b979cd456c1c22a030"
     },
     {
       "file": "camera.js",
@@ -107,15 +107,27 @@
     },
     {
       "file": "save.js",
-      "sha256": "50164b43313c93dca7ebf076456a3b319b0825a0b5c6f5712af8d3286d604cfc"
+      "sha256": "540b2af25e91bd6b5683c3ae8f80484a951baea9dc90452233dd72c26a4696ed"
     },
     {
       "file": "pwa.js",
-      "sha256": "4f30dd7b16ca3d56f7cbeee4f6e17ff7d7ef04d8aacefaea0af93bd2f6afec8f"
+      "sha256": "295b5918d9c6c92d2b973496019bb4c108dd36372ea93af55d1e5eccb4259b97"
+    },
+    {
+      "file": "boot.js",
+      "sha256": "c98862291f28bbaff2db271018ee76cd267e425e0281955c5c7f1d1184dac9e3"
+    },
+    {
+      "file": "i18n.js",
+      "sha256": "e4523ccf348c313bbc9242f03dc376d79bc17940d8349494ddf35866c49bb995"
     },
     {
       "file": "pwa-build.mjs",
-      "sha256": "dc00f87aa0194ec9721b1949888c310c219238fb9c2562704300d3cbd0003858"
+      "sha256": "f4f213c2bec77e4cce2c6fa64434d127b09d382f75b487c9a55750bac1bea80f"
+    },
+    {
+      "file": "boot-build.mjs",
+      "sha256": "3ac2f98697719c5b0e310b3032df72b8db2b5d2d4462e2382f842bf48bdf4c16"
     }
   ],
   "assets": [
